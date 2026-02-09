@@ -116,6 +116,10 @@
         tr:hover {
             background-color: #404040;
         }
+
+        th.active-sort {
+            box-shadow: inset 0 -3px 0 #fff;
+        }
         
         .spec-name {
             text-align: left;
@@ -286,6 +290,32 @@
                 return item.avg;
             }
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
+        }
+
+        function animateTableReorder() {
+            const rows = Array.from(document.querySelectorAll('tbody tr'));
+
+            const firstPositions = new Map();
+            rows.forEach(row => {
+                firstPositions.set(row, row.getBoundingClientRect());
+            });
+
+            requestAnimationFrame(() => {
+                rows.forEach(row => {
+                    const last = row.getBoundingClientRect();
+                    const first = firstPositions.get(row);
+
+                    const deltaY = first.top - last.top;
+
+                    row.style.transition = 'none';
+                    row.style.transform = `translateY(${deltaY}px)`;
+
+                    requestAnimationFrame(() => {
+                        row.style.transition = 'transform 0.35s ease';
+                        row.style.transform = '';
+                    });
+                });
+            });
         }
         
         function renderTable() {
@@ -537,6 +567,11 @@ function renderTierVisualTable(tiersMap) {
                     }
 
                     renderTable();
+                    setTimeout(() => animateTableReorder(), 0);
+                    document.querySelectorAll('.sortable').forEach(th => 
+                        th.classList.remove('active-sort')
+                    );
+                    th.classList.add('active-sort');
                 });
             });
         }
