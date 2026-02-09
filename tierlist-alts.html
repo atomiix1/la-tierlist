@@ -321,8 +321,9 @@
         let currentSortKey = 'avg'; // por defecto promedio global
         let currentSortDirection = 'desc';
         let specPositions = {}; // Almacenar posiciones anteriores
-        let previousRankingByAvg = []; // Almacenar ranking anterior por promedio
-        
+        let previousRankingByAvg = null; // Almacenar ranking anterior por promedio
+        let isFirstRender = true; // Bandera para primera renderización  
+      
         async function loadData() {
             try {
                 for (const col of COLUMNS) {
@@ -365,7 +366,7 @@
         }
 
         function getPositionChange(specKey, rtaRankingByAvg) {
-            if (previousRankingByAvg.length === 0) {
+            if (previousRankingByAvg === null || previousRankingByAvg.length === 0) {
                 return 0;
             }
             
@@ -420,7 +421,7 @@
                             positionChangeHtml = `<div class="position-change up">↑ ${positionChange}</div>`;
                         } else if (positionChange < 0) {
                             positionChangeHtml = `<div class="position-change down">↓ ${Math.abs(positionChange)}</div>`;
-                        } else if (previousRankingByAvg.length > 0) {
+                        } else if (!isFirstRender) {
                             positionChangeHtml = `<div class="position-change neutral">→</div>`;
                         }
 
@@ -679,7 +680,8 @@
             
             // Guardar el ranking por promedio para la próxima comparación
             previousRankingByAvg = rtaRankingByAvg.map(item => ({ specKey: item.specKey }));
-            
+            isFirstRender = false;
+
             // Agregar event listeners después de renderizar
             document.querySelectorAll('.sortable').forEach(th => {
                 th.addEventListener('click', () => {
