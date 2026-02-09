@@ -420,7 +420,7 @@
                         const activeVal = getActiveValue(item, dataBySpec);
                         const delta = ((activeVal - globalMean) * 100).toFixed(1);
                         const warn = needsWarning(item.avgConsistency);
-                        const positionChange = getPositionChange(item.specKey, rtaRankingByAvg);
+                        const positionChange = getPositionChange(item.specKey, rtaRanking);
                         
                         let positionChangeHtml = '';
                         if (positionChange > 0) {
