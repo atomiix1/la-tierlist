@@ -50,6 +50,43 @@
             font-size: 11px;
             color: #ddd;
             flex-shrink: 0;
+            animation: slideInSpec 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .spec-icon.reorder {
+            animation: reorderSpec 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes slideInSpec {
+            from {
+                opacity: 0;
+                transform: translateY(-20px) scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes reorderSpec {
+            0% {
+                transform: scale(1) rotate(0deg);
+            }
+            50% {
+                transform: scale(1.1) rotate(5deg);
+            }
+            100% {
+                transform: scale(1) rotate(0deg);
+            }
+        }
+
+        @keyframes shimmer {
+            0%, 100% {
+                filter: brightness(1);
+            }
+            50% {
+                filter: brightness(1.2);
+            }
         }
 
         .spec-icon img {
@@ -60,6 +97,11 @@
             background-color: #2d2d2d;
             padding: 6px;
             box-shadow: 0 0 6px rgba(0,0,0,0.4);
+            transition: filter 0.3s ease;
+        }
+
+        .spec-icon.reorder img {
+            animation: shimmer 0.5s ease-in-out;
         }
 
         .spec-icon figcaption {
@@ -118,10 +160,18 @@
             user-select: none;
         }
 
+        th.sortable {
+            transition: background-color 0.3s ease;
+        }
+
         th.sortable:hover {
             background-color: #1558c0;
         }
         
+        tr {
+            transition: background-color 0.3s ease;
+        }
+
         tr:hover {
             background-color: #404040;
         }
@@ -247,6 +297,7 @@
         let allData = {};
         let currentSortKey = 'avg';
         let currentSortDirection = 'desc';
+        let previousSpecOrder = [];
         
         async function loadData() {
             try {
@@ -289,7 +340,7 @@
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
         }
 
-        function renderTierVisualTable(tiersMap, dataBySpec, globalMean) {
+        function renderTierVisualTable(tiersMap, dataBySpec, globalMean, currentSpecOrder) {
             let html = `
             <div style="margin-bottom:12px;">
                 <button id="toggleTiers" class="tab-btn active">
@@ -323,9 +374,12 @@
                         const activeVal = getActiveValue(item, dataBySpec);
                         const delta = ((activeVal - globalMean) * 100).toFixed(1);
                         const warn = needsWarning(item.avgConsistency);
+                        const hasReordered = previousSpecOrder.length > 0 && 
+                                           previousSpecOrder.includes(item.specKey);
 
                         html += `
-                        <figure class="spec-icon"
+                        <figure class="spec-icon${hasReordered ? ' reorder' : ''}"
+                            data-spec="${item.specKey}"
                             title="
             ${item.specKey}
             RTA medio: ${activeVal.toFixed(3)}
@@ -484,6 +538,9 @@
                 });
             });
 
+            // Guardar el orden actual para la próxima renderización
+            const currentSpecOrder = rtaRanking.map(r => r.specKey);
+
             let rtaHtml = '<div class="table-wrapper"><table><thead><tr>';
             rtaHtml += '<th style="text-align:center;">#</th>';
             rtaHtml += '<th style="text-align:left;">Spec</th>';
@@ -526,7 +583,7 @@
 
             rtaHtml += '</tbody></table></div>';
 
-            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean);
+            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean, currentSpecOrder);
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
             
             // Agregar event listeners después de renderizar
@@ -541,6 +598,7 @@
                         currentSortDirection = 'desc';
                     }
 
+                    previousSpecOrder = currentSpecOrder;
                     renderTable();
                 });
             });
