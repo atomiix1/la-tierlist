@@ -232,6 +232,8 @@
             { raid: 'Kazeros', gate: 'G2' }
         ];
         let allData = {};
+        let currentSortKey = 'avg'; // por defecto promedio global
+        let currentSortDirection = 'desc';
         
         async function loadData() {
             try {
@@ -277,6 +279,13 @@
             const ajustado = base * (1 - consistencia * 0.1);
 
             return ajustado;
+        }
+
+        function getActiveValue(item, dataBySpec) {
+            if (currentSortKey === 'avg') {
+                return item.avg;
+            }
+            return dataBySpec[item.specKey].rta[currentSortKey] || 0;
         }
         
         function renderTable() {
@@ -368,10 +377,24 @@
                 return { specKey, avg, avgConsistency };
             });
 
-            rtaRanking.sort((a, b) => b.avg - a.avg);
+            rtaRanking.sort((a, b) => {
+                let valA, valB;
+
+                if (currentSortKey === 'avg') {
+                    valA = a.avg;
+                    valB = b.avg;
+                } else {
+                    valA = dataBySpec[a.specKey].rta[currentSortKey] || 0;
+                    valB = dataBySpec[b.specKey].rta[currentSortKey] || 0;
+                }
+
+                return currentSortDirection === 'desc'
+                    ? valB - valA
+                    : valA - valB;
+            });
 
             const globalMean =
-            rtaRanking.reduce((s, r) => s + r.avg, 0) / rtaRanking.length;
+            rtaRanking.reduce((s, r) => s + getActiveValue(r, dataBySpec), 0) / rtaRanking.length;
 
             function getTierByRTA(avg) {
             if (avg >= globalMean + 0.08) return { stars: 5, label: 'S', color: 'rgba(255,215,0,0.25)' };
@@ -382,7 +405,7 @@
         }
 
             rtaRanking.forEach((item, index) => {
-                item.tier = getTierByRTA(item.avg);
+                item.tier = getTierByRTA(getActiveValue(item, dataBySpec));
             });
 
             const tiersMap = {
@@ -394,7 +417,7 @@
             };
 
             rtaRanking.forEach(item => {
-                const tier = getTierByRTA(item.avg);
+                const tier = getTierByRTA(getActiveValue(item, dataBySpec));
                 tiersMap[tier.stars].push({
                     ...item,
                     tier
@@ -433,7 +456,8 @@
                 }
 
                 for (const item of specs) {
-                    const delta = ((item.avg - globalMean) * 100).toFixed(1);
+                    const activeVal = getActiveValue(item, dataBySpec);
+                    const delta = ((activeVal - globalMean) * 100).toFixed(1);
                     const warn = needsWarning(item.avgConsistency);
 
                     html += `
@@ -469,9 +493,13 @@
             rtaHtml += '<th style="text-align:left;">Spec</th>';
 
             for (const col of COLUMNS) {
-                rtaHtml += `<th>${col.raid} ${col.gate}</th>`;
+                const key = `${col.raid}${col.gate}Main`;
+                const arrow = currentSortKey === key
+                ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
+                : '';
+                rtaHtml += `<th class="sortable" data-key="${key}">${col.raid} ${col.gate} ${arrow}</th>`;
             }
-            rtaHtml += '<th>Promedio</th></tr></thead><tbody>';
+            rtaHtml += `<th class="sortable" data-key="avg">Promedio</th>`;
 
             let pos = 1;
             for (const item of rtaRanking) {
@@ -498,6 +526,20 @@
 
             const tierVisualHtml = renderTierVisualTable(tiersMap);
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
+            document.querySelectorAll('.sortable').forEach(th => {
+                th.addEventListener('click', () => {
+                    const key = th.dataset.key;
+
+                    if (currentSortKey === key) {
+                        currentSortDirection = currentSortDirection === 'desc' ? 'asc' : 'desc';
+                    } else {
+                        currentSortKey = key;
+                        currentSortDirection = 'desc';
+                    }
+
+                    renderTable();
+                });
+            });
         }
         
         loadData();
