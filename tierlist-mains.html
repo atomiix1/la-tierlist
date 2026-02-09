@@ -320,9 +320,9 @@
         let allData = {};
         let currentSortKey = 'avg';
         let currentSortDirection = 'desc';
-        let specPositions = {}; // Almacenar posiciones anteriores
-        let initialRankingByAvg = {}; // Almacenar ÍNDICES del ranking INICIAL por promedio
-        let isFirstRender = true; // Bandera para primera renderización
+        let specPositions = {};
+        let averageRankingPositions = {}; // { specKey: posición en ranking average }
+        let isFirstRender = true;
         
         async function loadData() {
             try {
@@ -365,7 +365,7 @@
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
         }
 
-        function renderTierVisualTable(tiersMap, dataBySpec, globalMean, positionChanges) {
+        function renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRankingByAvg) {
             let html = `
             <div style="margin-bottom:12px;">
                 <button id="toggleTiers" class="tab-btn active">
@@ -399,7 +399,13 @@
                         const activeVal = getActiveValue(item, dataBySpec);
                         const delta = ((activeVal - globalMean) * 100).toFixed(1);
                         const warn = needsWarning(item.avgConsistency);
-                        const positionChange = positionChanges[item.specKey] || 0;
+                        
+                        // Obtener posición en ranking actual
+                        const currentPosition = rtaRankingByAvg.findIndex(r => r.specKey === item.specKey) + 1;
+                        // Obtener posición en ranking average
+                        const averagePosition = averageRankingPositions[item.specKey] || 0;
+                        // Calcular diferencia (positivo = mejor en el actual)
+                        const positionChange = averagePosition - currentPosition;
                         
                         let positionChangeHtml = '';
                         if (positionChange > 0) {
@@ -418,7 +424,9 @@
             RTA medio: ${activeVal.toFixed(3)}
             Δ vs ${globalMean.toFixed(2)}: ${delta}%
             Variabilidad: ${item.avgConsistency.toFixed(2)}
-            Cambio de posición (vs inicial): ${positionChange > 0 ? '+' : ''}${positionChange}
+            Posición actual: ${currentPosition}
+            Posición en average: ${averagePosition}
+            Diferencia: ${positionChange}
                             ">
                             <img src="${specToImagePath(item.specKey)}"
                                 alt="${item.specKey}">
@@ -443,7 +451,6 @@
         }
 
         function animateSpecMovement() {
-            // Esperar a que el DOM se renderice
             requestAnimationFrame(() => {
                 const specIcons = document.querySelectorAll('.spec-icon[data-spec]');
                 
@@ -457,25 +464,21 @@
                         height: currentRect.height
                     };
 
-                    // Si existe una posición anterior, calcular la diferencia
                     if (specPositions[specKey]) {
                         const prevPos = specPositions[specKey];
                         const deltaX = prevPos.x - currentPos.x;
                         const deltaY = prevPos.y - currentPos.y;
 
-                        // Si hay movimiento, animar
                         if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
                             icon.classList.remove('animate-move');
                             icon.style.setProperty('--tx', `${deltaX}px`);
                             icon.style.setProperty('--ty', `${deltaY}px`);
                             
-                            // Trigger reflow para reiniciar la animación
                             void icon.offsetWidth;
                             icon.classList.add('animate-move');
                         }
                     }
 
-                    // Guardar la posición actual para la próxima vez
                     specPositions[specKey] = currentPos;
                 });
             });
@@ -565,26 +568,15 @@
                 return { specKey, avg, avgConsistency };
             });
 
-            // Crear ranking por promedio para comparación
+            // RANKING POR PROMEDIO (REFERENCIA)
             const rtaRankingByAvg = [...rtaRanking].sort((a, b) => b.avg - a.avg);
 
-            // Si es la primera renderización, guardar el ranking inicial
+            // Guardar posiciones del ranking average SOLO en la primera renderización
             if (isFirstRender) {
                 rtaRankingByAvg.forEach((item, index) => {
-                    initialRankingByAvg[item.specKey] = index;
+                    averageRankingPositions[item.specKey] = index + 1; // +1 porque es posición (1-indexed)
                 });
             }
-
-            // Calcular cambios de posición respecto AL RANKING INICIAL
-            const positionChanges = {};
-            rtaRankingByAvg.forEach((item, currentIndex) => {
-                const initialIndex = initialRankingByAvg[item.specKey];
-                if (initialIndex !== undefined) {
-                    positionChanges[item.specKey] = initialIndex - currentIndex;
-                } else {
-                    positionChanges[item.specKey] = 0;
-                }
-            });
 
             rtaRanking.sort((a, b) => {
                 let valA, valB;
@@ -675,15 +667,12 @@
 
             rtaHtml += '</tbody></table></div>';
 
-            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean, positionChanges);
+            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRankingByAvg);
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
             
-            // Animar el movimiento de los specs
             animateSpecMovement();
-            
             isFirstRender = false;
             
-            // Agregar event listeners después de renderizar
             document.querySelectorAll('.sortable').forEach(th => {
                 th.addEventListener('click', () => {
                     const key = th.dataset.key;
@@ -699,7 +688,6 @@
                 });
             });
 
-            // Agregar toggle para la vista visual
             setTimeout(() => {
                 const btn = document.getElementById('toggleTiers');
                 const cont = document.getElementById('tierVisualContainer');
