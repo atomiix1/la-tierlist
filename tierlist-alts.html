@@ -464,7 +464,7 @@
                     <figure class="spec-icon"
                         title="
         ${item.specKey}
-        RTA medio: ${item.avg.toFixed(3)}
+        RTA medio: ${getActiveValue(item, dataBySpec).toFixed(3)}
         Δ vs ${globalMean.toFixed(2)}: ${delta}%
         Variabilidad: ${item.avgConsistency.toFixed(2)}
                         ">
