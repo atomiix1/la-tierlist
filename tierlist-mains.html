@@ -40,6 +40,8 @@
             display: flex;
             flex-wrap: wrap;
             gap: 12px;
+            align-items: flex-start;
+            align-content: flex-start;
         }
 
         .spec-icon {
@@ -47,6 +49,7 @@
             text-align: center;
             font-size: 11px;
             color: #ddd;
+            flex-shrink: 0;
         }
 
         .spec-icon img {
@@ -111,6 +114,12 @@
             font-weight: bold;
             position: sticky;
             top: 0;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th.sortable:hover {
+            background-color: #1558c0;
         }
         
         tr:hover {
@@ -204,6 +213,10 @@
             flex-direction: column;
             align-items: center;
         }
+
+        #tierVisualContainer tr {
+            transition: background-color 0.3s ease;
+        }
     </style>
 </head>
 <body>
@@ -232,12 +245,11 @@
             { raid: 'Kazeros', gate: 'G2' }
         ];
         let allData = {};
-        let currentSortKey = 'avg'; // por defecto promedio global
+        let currentSortKey = 'avg';
         let currentSortDirection = 'desc';
         
         async function loadData() {
             try {
-                // Cargar todos los datos necesarios
                 for (const col of COLUMNS) {
                     const key = `${col.raid}${col.gate}Main`;
                     const response = await fetch(`tierlist/${col.raid.toLowerCase()}${col.gate}Main.json`);
@@ -246,14 +258,6 @@
                     }
                 }
                 renderTable();
-                setTimeout(() => {
-                    const btn = document.getElementById('toggleTiers');
-                    const cont = document.getElementById('tierVisualContainer');
-
-                    btn.addEventListener('click', () => {
-                        cont.style.display = cont.style.display === 'none' ? 'block' : 'none';
-                    });
-                }, 0);
             } catch (error) {
                 document.getElementById('content').innerHTML = `<div class="error">Error al cargar datos: ${error.message}</div>`;
                 console.error(error);
@@ -266,18 +270,15 @@
         }
 
         function needsWarning(consistency) {
-            return consistency >= 0.35; // ajustable
+            return consistency >= 0.35;
         }
 
         function rendimientoTipicoAjustado(stat, raidStats) {
             const medianNorm = stat.median / raidStats.median;
             const q3Norm = stat.q3 / raidStats.q3;
-
             const base = 0.7 * medianNorm + 0.3 * q3Norm;
-
             const consistencia = (stat.q3 - stat.q1) / stat.median;
             const ajustado = base * (1 - consistencia * 0.1);
-
             return ajustado;
         }
 
@@ -287,13 +288,76 @@
             }
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
         }
+
+        function renderTierVisualTable(tiersMap, dataBySpec, globalMean) {
+            let html = `
+            <div style="margin-bottom:12px;">
+                <button id="toggleTiers" class="tab-btn active">
+                    Mostrar / Ocultar Tiers Visuales
+                </button>
+            </div>
+            <div id="tierVisualContainer" class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:110px; text-align:left;">Tier</th>
+                        <th style="text-align:left;">Specs</th>
+                    </tr>
+                </thead>
+                <tbody>
+            `;
+
+            for (let stars = 5; stars >= 1; stars--) {
+                const specs = tiersMap[stars];
+                const tierLabel = '⭐'.repeat(stars);
+
+                html += `<tr>
+                    <td style="font-weight:bold;text-align:center;">${tierLabel}</td>
+                    <td class="tier-specs">
+                `;
+
+                if (!specs.length) {
+                    html += `<span style="opacity:0.5;font-style:italic;">(Vacío)</span>`;
+                } else {
+                    for (const item of specs) {
+                        const activeVal = getActiveValue(item, dataBySpec);
+                        const delta = ((activeVal - globalMean) * 100).toFixed(1);
+                        const warn = needsWarning(item.avgConsistency);
+
+                        html += `
+                        <figure class="spec-icon"
+                            title="
+            ${item.specKey}
+            RTA medio: ${activeVal.toFixed(3)}
+            Δ vs ${globalMean.toFixed(2)}: ${delta}%
+            Variabilidad: ${item.avgConsistency.toFixed(2)}
+                            ">
+                            <img src="${specToImagePath(item.specKey)}"
+                                alt="${item.specKey}">
+                            <figcaption>
+                                ${item.specKey}
+                                <div class="badge ${delta >= 0 ? 'pos' : 'neg'}">
+                                    ${delta >= 0 ? '+' : ''}${delta}%
+                                </div>
+                                ${warn ? '<div class="warn">⚠️</div>' : ''}
+                            </figcaption>
+                        </figure>
+                        `;
+                    }
+                }
+
+                html += '</td></tr>';
+            }
+
+            html += '</tbody></table></div>';
+            return html;
+        }
         
         function renderTable() {
             const specs = new Set();
             const dataBySpec = {};
             const raidGlobals = {};
 
-            // Calcular raidGlobals
             for (const col of COLUMNS) {
                 const key = `${col.raid}${col.gate}Main`;
                 const data = allData[key]?.stats || [];
@@ -304,7 +368,6 @@
                 };
             }
             
-            // Recolectar todos los specs
             for (const col of COLUMNS) {
                 const key = `${col.raid}${col.gate}Main`;
                 const data = allData[key];
@@ -317,12 +380,11 @@
                         }
                         const rta = rendimientoTipicoAjustado(stat, raidGlobals[key]);
                         dataBySpec[specKey].rta[key] = rta;
-                        dataBySpec[specKey][key] = stat.median; // Guardar median DPS
+                        dataBySpec[specKey][key] = stat.median;
                     }
                 }
             }
             
-            // Normalizar valores por columna (0-1)
             const normalizedBySpec = {};
             for (const specKey of specs) {
                 normalizedBySpec[specKey] = {};
@@ -335,7 +397,6 @@
                 }
             }
             
-            // Calcular totales y ranking
             const ranking = [];
             for (const specKey of specs) {
                 let total = 0;
@@ -343,7 +404,7 @@
                     const key = `${col.raid}${col.gate}Main`;
                     total += normalizedBySpec[specKey][key] || 0;
                 }
-                const normalized = (total / COLUMNS.length) * 10; // 0-10
+                const normalized = (total / COLUMNS.length) * 10;
                 ranking.push({
                     specKey,
                     total,
@@ -359,7 +420,6 @@
                 const values = Object.values(rtaEntries || {});
                 const avg = values.reduce((a, b) => a + b, 0) / values.length;
 
-                // Consistencia media
                 const consistencies = [];
                 for (const col of COLUMNS) {
                     const key = `${col.raid}${col.gate}Main`;
@@ -394,7 +454,7 @@
             });
 
             const globalMean =
-            rtaRanking.reduce((s, r) => s + getActiveValue(r, dataBySpec), 0) / rtaRanking.length;
+                rtaRanking.reduce((s, r) => s + getActiveValue(r, dataBySpec), 0) / rtaRanking.length;
 
             function getTierByRTA(avg) {
                 if (avg >= globalMean + 0.08) return { stars: 5, label: 'S', color: 'rgba(255,215,0,0.25)' };
@@ -404,7 +464,7 @@
                 return { stars: 1, label: 'D', color: 'rgba(244,67,54,0.25)' };
             }
 
-            rtaRanking.forEach((item, index) => {
+            rtaRanking.forEach((item) => {
                 item.tier = getTierByRTA(getActiveValue(item, dataBySpec));
             });
 
@@ -424,81 +484,24 @@
                 });
             });
 
-function renderTierVisualTable(tiersMap) {
-            let html = `
-            <div style="margin-bottom:12px;">
-                <button id="toggleTiers" class="tab-btn active">
-                    Mostrar / Ocultar Tiers Visuales
-                </button>
-            </div>
-            <div id="tierVisualContainer" class="table-wrapper">
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width:110px; text-align:left;">Tier</th>
-                        <th style="text-align:left;">Specs</th>
-                    </tr>
-                </thead>
-                <tbody>
-            `;
-
-            for (let stars = 5; stars >= 1; stars--) {
-                const specs = tiersMap[stars];
-                const tierLabel = '⭐'.repeat(stars);
-
-                html += `<tr>
-                    <td style="font-weight:bold;text-align:center;">${tierLabel}</td>
-                    <td class="tier-specs">
-                `;
-
-                if (!specs.length) {
-                    html += `<span style="opacity:0.5;font-style:italic;">(Vacío)</span>`;
-                }
-
-                for (const item of specs) {
-                    const activeVal = getActiveValue(item, dataBySpec);
-                    const delta = ((activeVal - globalMean) * 100).toFixed(1);
-                    const warn = needsWarning(item.avgConsistency);
-
-                    html += `
-                    <figure class="spec-icon"
-                        title="
-        ${item.specKey}
-        RTA medio: ${getActiveValue(item, dataBySpec).toFixed(3)}
-        Δ vs ${globalMean.toFixed(2)}: ${delta}%
-        Variabilidad: ${item.avgConsistency.toFixed(2)}
-                        ">
-                        <img src="${specToImagePath(item.specKey)}"
-                            alt="${item.specKey}">
-                        <figcaption>
-                            ${item.specKey}
-                            <div class="badge ${delta >= 0 ? 'pos' : 'neg'}">
-                                ${delta >= 0 ? '+' : ''}${delta}%
-                            </div>
-                            ${warn ? '<div class="warn">⚠️</div>' : ''}
-                        </figcaption>
-                    </figure>
-                    `;
-                }
-
-                html += '</td></tr>';
-            }
-
-            html += '</tbody></table></div>';
-            return html;
-        }
-            
             let rtaHtml = '<div class="table-wrapper"><table><thead><tr>';
             rtaHtml += '<th style="text-align:center;">#</th>';
             rtaHtml += '<th style="text-align:left;">Spec</th>';
+            
             for (const col of COLUMNS) {
                 const key = `${col.raid}${col.gate}Main`;
                 const arrow = currentSortKey === key
-                ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
-                : '';
+                    ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
+                    : '';
                 rtaHtml += `<th class="sortable" data-key="${key}">${col.raid} ${col.gate} ${arrow}</th>`;
             }
-            rtaHtml += `<th class="sortable" data-key="avg">Promedio</th>`;
+            
+            const avgArrow = currentSortKey === 'avg'
+                ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
+                : '';
+            rtaHtml += `<th class="sortable" data-key="avg">Promedio ${avgArrow}</th>`;
+            rtaHtml += `<th>Tier</th>`;
+            rtaHtml += '</tr></thead><tbody>';
 
             let pos = 1;
             for (const item of rtaRanking) {
@@ -523,8 +526,10 @@ function renderTierVisualTable(tiersMap) {
 
             rtaHtml += '</tbody></table></div>';
 
-            const tierVisualHtml = renderTierVisualTable(tiersMap);
+            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean);
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
+            
+            // Agregar event listeners después de renderizar
             document.querySelectorAll('.sortable').forEach(th => {
                 th.addEventListener('click', () => {
                     const key = th.dataset.key;
@@ -539,6 +544,17 @@ function renderTierVisualTable(tiersMap) {
                     renderTable();
                 });
             });
+
+            // Agregar toggle para la vista visual
+            setTimeout(() => {
+                const btn = document.getElementById('toggleTiers');
+                const cont = document.getElementById('tierVisualContainer');
+                if (btn && cont) {
+                    btn.addEventListener('click', () => {
+                        cont.style.display = cont.style.display === 'none' ? 'block' : 'none';
+                    });
+                }
+            }, 0);
         }
         
         loadData();
