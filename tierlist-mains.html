@@ -364,15 +364,13 @@
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
         }
 
-        function getPositionChange(specKey) {
+        function getPositionChange(specKey, rtaRanking) {
             if (previousRanking.length === 0) {
                 return 0;
             }
             
             const previousIndex = previousRanking.findIndex(item => item.specKey === specKey);
-            const currentRanking = Array.from(document.querySelectorAll('.spec-icon[data-spec]'))
-                .map(icon => icon.dataset.spec);
-            const currentIndex = currentRanking.indexOf(specKey);
+            const currentIndex = rtaRanking.findIndex(item => item.specKey === specKey);
             
             if (previousIndex === -1) {
                 return 0; // Nuevo spec
@@ -381,7 +379,7 @@
             return previousIndex - currentIndex; // Positivo = subió, negativo = bajó
         }
 
-        function renderTierVisualTable(tiersMap, dataBySpec, globalMean) {
+        function renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRanking) {
             let html = `
             <div style="margin-bottom:12px;">
                 <button id="toggleTiers" class="tab-btn active">
@@ -415,15 +413,15 @@
                         const activeVal = getActiveValue(item, dataBySpec);
                         const delta = ((activeVal - globalMean) * 100).toFixed(1);
                         const warn = needsWarning(item.avgConsistency);
-                        const positionChange = getPositionChange(item.specKey);
+                        const positionChange = getPositionChange(item.specKey, rtaRanking);
                         
                         let positionChangeHtml = '';
-                        if (positionChange !== 0) {
-                            const changeClass = positionChange > 0 ? 'up' : 'down';
-                            const arrow = positionChange > 0 ? '↑' : '↓';
-                            positionChangeHtml = `<div class="position-change ${changeClass}">${arrow} ${Math.abs(positionChange)}</div>`;
+                        if (positionChange > 0) {
+                            positionChangeHtml = `<div class="position-change up">↑ ${positionChange}</div>`;
+                        } else if (positionChange < 0) {
+                            positionChangeHtml = `<div class="position-change down">↓ ${Math.abs(positionChange)}</div>`;
                         } else if (previousRanking.length > 0) {
-                            positionChangeHtml = `<div class="position-change neutral">→ —</div>`;
+                            positionChangeHtml = `<div class="position-change neutral">→</div>`;
                         }
 
                         html += `
@@ -670,7 +668,7 @@
 
             rtaHtml += '</tbody></table></div>';
 
-            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean);
+            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRanking);
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
             
             // Animar el movimiento de los specs
