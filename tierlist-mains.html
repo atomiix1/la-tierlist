@@ -109,6 +109,28 @@
             margin-top: 4px;
             line-height: 1.2;
         }
+
+        .position-change {
+            font-size: 9px;
+            margin-top: 3px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+        }
+
+        .position-change.up {
+            color: #81c784;
+        }
+
+        .position-change.down {
+            color: #e57373;
+        }
+
+        .position-change.neutral {
+            color: #ffb74d;
+        }
         
         .tab-btn {
             padding: 12px 20px;
@@ -299,6 +321,7 @@
         let currentSortKey = 'avg';
         let currentSortDirection = 'desc';
         let specPositions = {}; // Almacenar posiciones anteriores
+        let previousRanking = []; // Almacenar ranking anterior
         
         async function loadData() {
             try {
@@ -341,6 +364,23 @@
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
         }
 
+        function getPositionChange(specKey) {
+            if (previousRanking.length === 0) {
+                return 0;
+            }
+            
+            const previousIndex = previousRanking.findIndex(item => item.specKey === specKey);
+            const currentRanking = Array.from(document.querySelectorAll('.spec-icon[data-spec]'))
+                .map(icon => icon.dataset.spec);
+            const currentIndex = currentRanking.indexOf(specKey);
+            
+            if (previousIndex === -1) {
+                return 0; // Nuevo spec
+            }
+            
+            return previousIndex - currentIndex; // Positivo = subió, negativo = bajó
+        }
+
         function renderTierVisualTable(tiersMap, dataBySpec, globalMean) {
             let html = `
             <div style="margin-bottom:12px;">
@@ -375,6 +415,16 @@
                         const activeVal = getActiveValue(item, dataBySpec);
                         const delta = ((activeVal - globalMean) * 100).toFixed(1);
                         const warn = needsWarning(item.avgConsistency);
+                        const positionChange = getPositionChange(item.specKey);
+                        
+                        let positionChangeHtml = '';
+                        if (positionChange !== 0) {
+                            const changeClass = positionChange > 0 ? 'up' : 'down';
+                            const arrow = positionChange > 0 ? '↑' : '↓';
+                            positionChangeHtml = `<div class="position-change ${changeClass}">${arrow} ${Math.abs(positionChange)}</div>`;
+                        } else if (previousRanking.length > 0) {
+                            positionChangeHtml = `<div class="position-change neutral">→ —</div>`;
+                        }
 
                         html += `
                         <figure class="spec-icon"
@@ -384,6 +434,7 @@
             RTA medio: ${activeVal.toFixed(3)}
             Δ vs ${globalMean.toFixed(2)}: ${delta}%
             Variabilidad: ${item.avgConsistency.toFixed(2)}
+            Cambio de posición: ${positionChange > 0 ? '+' : ''}${positionChange}
                             ">
                             <img src="${specToImagePath(item.specKey)}"
                                 alt="${item.specKey}">
@@ -392,6 +443,7 @@
                                 <div class="badge ${delta >= 0 ? 'pos' : 'neg'}">
                                     ${delta >= 0 ? '+' : ''}${delta}%
                                 </div>
+                                ${positionChangeHtml}
                                 ${warn ? '<div class="warn">⚠️</div>' : ''}
                             </figcaption>
                         </figure>
@@ -623,6 +675,9 @@
             
             // Animar el movimiento de los specs
             animateSpecMovement();
+            
+            // Guardar el ranking actual como anterior para la próxima renderización
+            previousRanking = rtaRanking.map(item => ({ specKey: item.specKey }));
             
             // Agregar event listeners después de renderizar
             document.querySelectorAll('.sortable').forEach(th => {
