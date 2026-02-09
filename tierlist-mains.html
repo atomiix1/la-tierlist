@@ -321,7 +321,7 @@
         let currentSortKey = 'avg';
         let currentSortDirection = 'desc';
         let specPositions = {}; // Almacenar posiciones anteriores
-        let previousRankingByAvg = {}; // Almacenar índices del ranking anterior por promedio
+        let initialRankingByAvg = {}; // Almacenar ÍNDICES del ranking INICIAL por promedio
         let isFirstRender = true; // Bandera para primera renderización
         
         async function loadData() {
@@ -363,19 +363,6 @@
                 return item.avg;
             }
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
-        }
-
-        function getPositionChange(specKey) {
-            if (Object.keys(previousRankingByAvg).length === 0) {
-                return 0;
-            }
-            
-            if (!previousRankingByAvg.hasOwnProperty(specKey)) {
-                return 0; // Nuevo spec
-            }
-            
-            // previousRankingByAvg ya contiene los índices del ranking anterior
-            return previousRankingByAvg[specKey]; // Retorna el cambio ya calculado
         }
 
         function renderTierVisualTable(tiersMap, dataBySpec, globalMean, positionChanges) {
@@ -431,7 +418,7 @@
             RTA medio: ${activeVal.toFixed(3)}
             Δ vs ${globalMean.toFixed(2)}: ${delta}%
             Variabilidad: ${item.avgConsistency.toFixed(2)}
-            Cambio de posición (vs promedio): ${positionChange > 0 ? '+' : ''}${positionChange}
+            Cambio de posición (vs inicial): ${positionChange > 0 ? '+' : ''}${positionChange}
                             ">
                             <img src="${specToImagePath(item.specKey)}"
                                 alt="${item.specKey}">
@@ -581,12 +568,19 @@
             // Crear ranking por promedio para comparación
             const rtaRankingByAvg = [...rtaRanking].sort((a, b) => b.avg - a.avg);
 
-            // Calcular cambios de posición ANTES de cambiar rtaRanking
+            // Si es la primera renderización, guardar el ranking inicial
+            if (isFirstRender) {
+                rtaRankingByAvg.forEach((item, index) => {
+                    initialRankingByAvg[item.specKey] = index;
+                });
+            }
+
+            // Calcular cambios de posición respecto AL RANKING INICIAL
             const positionChanges = {};
             rtaRankingByAvg.forEach((item, currentIndex) => {
-                const previousIndex = previousRankingByAvg[item.specKey];
-                if (previousIndex !== undefined) {
-                    positionChanges[item.specKey] = previousIndex - currentIndex;
+                const initialIndex = initialRankingByAvg[item.specKey];
+                if (initialIndex !== undefined) {
+                    positionChanges[item.specKey] = initialIndex - currentIndex;
                 } else {
                     positionChanges[item.specKey] = 0;
                 }
@@ -687,11 +681,6 @@
             // Animar el movimiento de los specs
             animateSpecMovement();
             
-            // Guardar índices del ranking por promedio para la próxima comparación
-            previousRankingByAvg = {};
-            rtaRankingByAvg.forEach((item, index) => {
-                previousRankingByAvg[item.specKey] = index;
-            });
             isFirstRender = false;
             
             // Agregar event listeners después de renderizar
