@@ -232,6 +232,8 @@
             { raid: 'Kazeros', gate: 'G2' }
         ];
         let allData = {};
+        let currentSortKey = 'avg'; // por defecto promedio global
+        let currentSortDirection = 'desc';
         
         async function loadData() {
             try {
@@ -368,7 +370,21 @@
                 return { specKey, avg, avgConsistency };
             });
 
-            rtaRanking.sort((a, b) => b.avg - a.avg);
+            rtaRanking.sort((a, b) => {
+                let valA, valB;
+
+                if (currentSortKey === 'avg') {
+                    valA = a.avg;
+                    valB = b.avg;
+                } else {
+                    valA = dataBySpec[a.specKey].rta[currentSortKey] || 0;
+                    valB = dataBySpec[b.specKey].rta[currentSortKey] || 0;
+                }
+
+                return currentSortDirection === 'desc'
+                    ? valB - valA
+                    : valA - valB;
+            });
 
             const globalMean =
             rtaRanking.reduce((s, r) => s + r.avg, 0) / rtaRanking.length;
@@ -469,9 +485,13 @@ function renderTierVisualTable(tiersMap) {
             rtaHtml += '<th style="text-align:left;">Spec</th>';
 
             for (const col of COLUMNS) {
-                rtaHtml += `<th>${col.raid} ${col.gate}</th>`;
+                const key = `${col.raid}${col.gate}Main`;
+                const arrow = currentSortKey === key
+                ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
+                : '';
+                rtaHtml += `<th class="sortable" data-key="${key}">${col.raid} ${col.gate} ${arrow}</th>`;
             }
-            rtaHtml += '<th>Promedio</th></tr></thead><tbody>';
+            rtaHtml += `<th class="sortable" data-key="avg">Promedio</th>`;
 
             let pos = 1;
             for (const item of rtaRanking) {
@@ -498,6 +518,20 @@ function renderTierVisualTable(tiersMap) {
 
             const tierVisualHtml = renderTierVisualTable(tiersMap);
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
+            document.querySelectorAll('.sortable').forEach(th => {
+                th.addEventListener('click', () => {
+                    const key = th.dataset.key;
+
+                    if (currentSortKey === key) {
+                        currentSortDirection = currentSortDirection === 'desc' ? 'asc' : 'desc';
+                    } else {
+                        currentSortKey = key;
+                        currentSortDirection = 'desc';
+                    }
+
+                    renderTable();
+                });
+            });
         }
         
         loadData();
