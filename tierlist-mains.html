@@ -204,11 +204,6 @@
             flex-direction: column;
             align-items: center;
         }
-
-        .spec-icon {
-            transition: transform 1s ease;
-        }
-
     </style>
 </head>
 <body>
@@ -237,7 +232,6 @@
             { raid: 'Kazeros', gate: 'G2' }
         ];
         let allData = {};
-        let previousPositions = {};
         let currentSortKey = 'avg'; // por defecto promedio global
         let currentSortDirection = 'desc';
         
@@ -383,11 +377,6 @@
                 return { specKey, avg, avgConsistency };
             });
 
-            previousPositions = {};
-            rtaRanking.forEach((item, index) => {
-                previousPositions[item.specKey] = index;
-            });
-
             rtaRanking.sort((a, b) => {
                 let valA, valB;
 
@@ -471,15 +460,6 @@ function renderTierVisualTable(tiersMap) {
                     const delta = ((activeVal - globalMean) * 100).toFixed(1);
                     const warn = needsWarning(item.avgConsistency);
 
-                    const oldPos = previousPositions[item.specKey];
-                    const newPos = rtaRanking.findIndex(r => r.specKey === item.specKey);
-                    let positionDelta = 0;
-
-                    if (oldPos !== undefined) {
-                        positionDelta = oldPos - newPos;
-                    }
-
-
                     html += `
                     <figure class="spec-icon"
                         title="
@@ -496,12 +476,6 @@ function renderTierVisualTable(tiersMap) {
                                 ${delta >= 0 ? '+' : ''}${delta}%
                             </div>
                             ${warn ? '<div class="warn">⚠️</div>' : ''}
-                            ${positionDelta !== 0 ? `
-                            <div class="badge ${positionDelta > 0 ? 'pos' : 'neg'}">
-                                ${positionDelta > 0 ? '▲' : '▼'} ${Math.abs(positionDelta)}
-                            </div>
-                            ` : ''}
-
                         </figcaption>
                     </figure>
                     `;
@@ -550,31 +524,7 @@ function renderTierVisualTable(tiersMap) {
             rtaHtml += '</tbody></table></div>';
 
             const tierVisualHtml = renderTierVisualTable(tiersMap);
-            const oldRects = {};
-            document.querySelectorAll('.spec-icon').forEach(el => {
-                oldRects[el.querySelector('img').alt] = el.getBoundingClientRect();
-            });
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
-            requestAnimationFrame(() => {
-                document.querySelectorAll('.spec-icon').forEach(el => {
-                    const key = el.querySelector('img').alt;
-                    const newRect = el.getBoundingClientRect();
-                    const oldRect = oldRects[key];
-
-                    if (oldRect) {
-                        const dx = oldRect.left - newRect.left;
-                        const dy = oldRect.top - newRect.top;
-
-                        if (dx || dy) {
-                            el.style.transform = `translate(${dx}px, ${dy}px)`;
-
-                            requestAnimationFrame(() => {
-                                el.style.transform = '';
-                            });
-                        }
-                    }
-                });
-            });
             document.querySelectorAll('.sortable').forEach(th => {
                 th.addEventListener('click', () => {
                     const key = th.dataset.key;
