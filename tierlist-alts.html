@@ -40,6 +40,9 @@
             display: flex;
             flex-wrap: wrap;
             gap: 12px;
+            align-items: flex-start;
+            align-content: flex-start;
+            position: relative;
         }
 
         .spec-icon {
@@ -47,6 +50,44 @@
             text-align: center;
             font-size: 11px;
             color: #ddd;
+            flex-shrink: 0;
+            animation: slideInSpec 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+        }
+
+        .spec-icon.animate-move {
+            animation: moveSpec 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards !important;
+        }
+
+        @keyframes slideInSpec {
+            from {
+                opacity: 0;
+                transform: translateY(-20px) scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes moveSpec {
+            from {
+                transform: translate(var(--tx), var(--ty));
+                opacity: 0.7;
+            }
+            to {
+                transform: translate(0, 0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes shimmer {
+            0%, 100% {
+                filter: brightness(1);
+            }
+            50% {
+                filter: brightness(1.2);
+            }
         }
 
         .spec-icon img {
@@ -57,11 +98,38 @@
             background-color: #2d2d2d;
             padding: 6px;
             box-shadow: 0 0 6px rgba(0,0,0,0.4);
+            transition: filter 0.3s ease;
+        }
+
+        .spec-icon.animate-move img {
+            animation: shimmer 0.6s ease-in-out;
         }
 
         .spec-icon figcaption {
             margin-top: 4px;
             line-height: 1.2;
+        }
+
+        .position-change {
+            font-size: 9px;
+            margin-top: 3px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+        }
+
+        .position-change.up {
+            color: #81c784;
+        }
+
+        .position-change.down {
+            color: #e57373;
+        }
+
+        .position-change.neutral {
+            color: #ffb74d;
         }
         
         .tab-btn {
@@ -111,8 +179,22 @@
             font-weight: bold;
             position: sticky;
             top: 0;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th.sortable {
+            transition: background-color 0.3s ease;
+        }
+
+        th.sortable:hover {
+            background-color: #1558c0;
         }
         
+        tr {
+            transition: background-color 0.3s ease;
+        }
+
         tr:hover {
             background-color: #404040;
         }
@@ -204,6 +286,10 @@
             flex-direction: column;
             align-items: center;
         }
+
+        #tierVisualContainer tr {
+            transition: background-color 0.3s ease;
+        }
     </style>
 </head>
 <body>
@@ -234,10 +320,11 @@
         let allData = {};
         let currentSortKey = 'avg'; // por defecto promedio global
         let currentSortDirection = 'desc';
+        let specPositions = {}; // Almacenar posiciones anteriores
+        let previousRanking = []; // Almacenar ranking anterior
         
         async function loadData() {
             try {
-                // Cargar todos los datos necesarios
                 for (const col of COLUMNS) {
                     const key = `${col.raid}${col.gate}Alt`;
                     const response = await fetch(`tierlist/${col.raid.toLowerCase()}${col.gate}Alt.json`);
@@ -246,14 +333,6 @@
                     }
                 }
                 renderTable();
-                setTimeout(() => {
-                    const btn = document.getElementById('toggleTiers');
-                    const cont = document.getElementById('tierVisualContainer');
-
-                    btn.addEventListener('click', () => {
-                        cont.style.display = cont.style.display === 'none' ? 'block' : 'none';
-                    });
-                }, 0);
             } catch (error) {
                 document.getElementById('content').innerHTML = `<div class="error">Error al cargar datos: ${error.message}</div>`;
                 console.error(error);
@@ -272,12 +351,9 @@
         function rendimientoTipicoAjustado(stat, raidStats) {
             const medianNorm = stat.median / raidStats.median;
             const q3Norm = stat.q3 / raidStats.q3;
-
             const base = 0.7 * medianNorm + 0.3 * q3Norm;
-
             const consistencia = (stat.q3 - stat.q1) / stat.median;
             const ajustado = base * (1 - consistencia * 0.1);
-
             return ajustado;
         }
 
@@ -287,13 +363,143 @@
             }
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
         }
+
+        function getPositionChange(specKey, rtaRanking) {
+            if (previousRanking.length === 0) {
+                return 0;
+            }
+            
+            const previousIndex = previousRanking.findIndex(item => item.specKey === specKey);
+            const currentIndex = rtaRanking.findIndex(item => item.specKey === specKey);
+            
+            if (previousIndex === -1) {
+                return 0; // Nuevo spec
+            }
+            
+            return previousIndex - currentIndex; // Positivo = subió, negativo = bajó
+        }
+
+        function renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRanking) {
+            let html = `
+            <div style="margin-bottom:12px;">
+                <button id="toggleTiers" class="tab-btn active">
+                    Mostrar / Ocultar Tiers Visuales
+                </button>
+            </div>
+            <div id="tierVisualContainer" class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:110px; text-align:left;">Tier</th>
+                        <th style="text-align:left;">Specs</th>
+                    </tr>
+                </thead>
+                <tbody>
+            `;
+
+            for (let stars = 5; stars >= 1; stars--) {
+                const specs = tiersMap[stars];
+                const tierLabel = '⭐'.repeat(stars);
+
+                html += `<tr>
+                    <td style="font-weight:bold;text-align:center;">${tierLabel}</td>
+                    <td class="tier-specs">
+                `;
+
+                if (!specs.length) {
+                    html += `<span style="opacity:0.5;font-style:italic;">(Vacío)</span>`;
+                } else {
+                    for (const item of specs) {
+                        const activeVal = getActiveValue(item, dataBySpec);
+                        const delta = ((activeVal - globalMean) * 100).toFixed(1);
+                        const warn = needsWarning(item.avgConsistency);
+                        const positionChange = getPositionChange(item.specKey, rtaRanking);
+                        
+                        let positionChangeHtml = '';
+                        if (positionChange > 0) {
+                            positionChangeHtml = `<div class="position-change up">↑ ${positionChange}</div>`;
+                        } else if (positionChange < 0) {
+                            positionChangeHtml = `<div class="position-change down">↓ ${Math.abs(positionChange)}</div>`;
+                        } else if (previousRanking.length > 0) {
+                            positionChangeHtml = `<div class="position-change neutral">→</div>`;
+                        }
+
+                        html += `
+                        <figure class="spec-icon"
+                            data-spec="${item.specKey}"
+                            title="
+            ${item.specKey}
+            RTA medio: ${activeVal.toFixed(3)}
+            Δ vs ${globalMean.toFixed(2)}: ${delta}%
+            Variabilidad: ${item.avgConsistency.toFixed(2)}
+            Cambio de posición: ${positionChange > 0 ? '+' : ''}${positionChange}
+                            ">
+                            <img src="${specToImagePath(item.specKey)}"
+                                alt="${item.specKey}">
+                            <figcaption>
+                                ${item.specKey}
+                                <div class="badge ${delta >= 0 ? 'pos' : 'neg'}">
+                                    ${delta >= 0 ? '+' : ''}${delta}%
+                                </div>
+                                ${positionChangeHtml}
+                                ${warn ? '<div class="warn">⚠️</div>' : ''}
+                            </figcaption>
+                        </figure>
+                        `;
+                    }
+                }
+
+                html += '</td></tr>';
+            }
+
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function animateSpecMovement() {
+            // Esperar a que el DOM se renderice
+            requestAnimationFrame(() => {
+                const specIcons = document.querySelectorAll('.spec-icon[data-spec]');
+                
+                specIcons.forEach(icon => {
+                    const specKey = icon.dataset.spec;
+                    const currentRect = icon.getBoundingClientRect();
+                    const currentPos = {
+                        x: currentRect.left,
+                        y: currentRect.top,
+                        width: currentRect.width,
+                        height: currentRect.height
+                    };
+
+                    // Si existe una posición anterior, calcular la diferencia
+                    if (specPositions[specKey]) {
+                        const prevPos = specPositions[specKey];
+                        const deltaX = prevPos.x - currentPos.x;
+                        const deltaY = prevPos.y - currentPos.y;
+
+                        // Si hay movimiento, animar
+                        if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
+                            icon.classList.remove('animate-move');
+                            icon.style.setProperty('--tx', `${deltaX}px`);
+                            icon.style.setProperty('--ty', `${deltaY}px`);
+                            
+                            // Trigger reflow para reiniciar la animación
+                            void icon.offsetWidth;
+                            icon.classList.add('animate-move');
+                        }
+                    }
+
+                    // Guardar la posición actual para la próxima vez
+                    specPositions[specKey] = currentPos;
+                });
+            });
+        }
         
         function renderTable() {
             const specs = new Set();
             const dataBySpec = {};
             const raidGlobals = {};
             
-            // Calcular raidGlobals
             for (const col of COLUMNS) {
                 const key = `${col.raid}${col.gate}Alt`;
                 const data = allData[key]?.stats || [];
@@ -304,7 +510,6 @@
                 };
             }
 
-            // Recolectar todos los specs
             for (const col of COLUMNS) {
                 const key = `${col.raid}${col.gate}Alt`;
                 const data = allData[key];
@@ -322,7 +527,6 @@
                 }
             }
             
-            // Normalizar valores por columna (0-1)
             const normalizedBySpec = {};
             for (const specKey of specs) {
                 normalizedBySpec[specKey] = {};
@@ -335,7 +539,6 @@
                 }
             }
             
-            // Calcular totales y ranking
             const ranking = [];
             for (const specKey of specs) {
                 let total = 0;
@@ -359,7 +562,6 @@
                 const values = Object.values(rtaEntries || {});
                 const avg = values.reduce((a, b) => a + b, 0) / values.length;
 
-                // Consistencia media
                 const consistencies = [];
                 for (const col of COLUMNS) {
                     const key = `${col.raid}${col.gate}Alt`;
@@ -423,70 +625,6 @@
                     tier
                 });
             });
-
-            function renderTierVisualTable(tiersMap) {
-            let html = `
-            <div style="margin-bottom:12px;">
-                <button id="toggleTiers" class="tab-btn active">
-                    Mostrar / Ocultar Tiers Visuales
-                </button>
-            </div>
-            <div id="tierVisualContainer" class="table-wrapper">
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width:110px; text-align:left;">Tier</th>
-                        <th style="text-align:left;">Specs</th>
-                    </tr>
-                </thead>
-                <tbody>
-            `;
-
-            for (let stars = 5; stars >= 1; stars--) {
-                const specs = tiersMap[stars];
-                const tierLabel = '⭐'.repeat(stars);
-
-                html += `<tr>
-                    <td style="font-weight:bold;text-align:center;">${tierLabel}</td>
-                    <td class="tier-specs">
-                `;
-
-                if (!specs.length) {
-                    html += `<span style="opacity:0.5;font-style:italic;">(Vacío)</span>`;
-                }
-
-                for (const item of specs) {
-                    const activeVal = getActiveValue(item, dataBySpec);
-                    const delta = ((activeVal - globalMean) * 100).toFixed(1);
-                    const warn = needsWarning(item.avgConsistency);
-
-                    html += `
-                    <figure class="spec-icon"
-                        title="
-        ${item.specKey}
-        RTA medio: ${getActiveValue(item, dataBySpec).toFixed(3)}
-        Δ vs ${globalMean.toFixed(2)}: ${delta}%
-        Variabilidad: ${item.avgConsistency.toFixed(2)}
-                        ">
-                        <img src="${specToImagePath(item.specKey)}"
-                            alt="${item.specKey}">
-                        <figcaption>
-                            ${item.specKey}
-                            <div class="badge ${delta >= 0 ? 'pos' : 'neg'}">
-                                ${delta >= 0 ? '+' : ''}${delta}%
-                            </div>
-                            ${warn ? '<div class="warn">⚠️</div>' : ''}
-                        </figcaption>
-                    </figure>
-                    `;
-                }
-
-                html += '</td></tr>';
-            }
-
-            html += '</tbody></table></div>';
-            return html;
-        }
             
             let rtaHtml = '<div class="table-wrapper"><table><thead><tr>';
             rtaHtml += '<th style="text-align:center;">#</th>';
@@ -495,11 +633,17 @@
             for (const col of COLUMNS) {
                 const key = `${col.raid}${col.gate}Alt`;
                 const arrow = currentSortKey === key
-                ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
-                : '';
+                    ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
+                    : '';
                 rtaHtml += `<th class="sortable" data-key="${key}">${col.raid} ${col.gate} ${arrow}</th>`;
             }
-            rtaHtml += `<th class="sortable" data-key="avg">Promedio</th>`;
+
+            const avgArrow = currentSortKey === 'avg'
+                ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
+                : '';
+            rtaHtml += `<th class="sortable" data-key="avg">Promedio ${avgArrow}</th>`;
+            rtaHtml += `<th>Tier</th>`;
+            rtaHtml += '</tr></thead><tbody>';
 
             let pos = 1;
             for (const item of rtaRanking) {
@@ -524,8 +668,16 @@
 
             rtaHtml += '</tbody></table></div>';
 
-            const tierVisualHtml = renderTierVisualTable(tiersMap);
+            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRanking);
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
+            
+            // Animar el movimiento de los specs
+            animateSpecMovement();
+            
+            // Guardar el ranking actual como anterior para la próxima renderización
+            previousRanking = rtaRanking.map(item => ({ specKey: item.specKey }));
+            
+            // Agregar event listeners después de renderizar
             document.querySelectorAll('.sortable').forEach(th => {
                 th.addEventListener('click', () => {
                     const key = th.dataset.key;
@@ -540,9 +692,20 @@
                     renderTable();
                 });
             });
+
+            // Agregar toggle para la vista visual
+            setTimeout(() => {
+                const btn = document.getElementById('toggleTiers');
+                const cont = document.getElementById('tierVisualContainer');
+                if (btn && cont) {
+                    btn.addEventListener('click', () => {
+                        cont.style.display = cont.style.display === 'none' ? 'block' : 'none';
+                    });
+                }
+            }, 0);
         }
         
         loadData();
     </script>
 </body>
-</html>
+</html
