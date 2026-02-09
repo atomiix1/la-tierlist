@@ -281,7 +281,7 @@
             return ajustado;
         }
 
-        function getActiveValue(item) {
+        function getActiveValue(item, dataBySpec) {
             if (currentSortKey === 'avg') {
                 return item.avg;
             }
@@ -394,18 +394,18 @@
             });
 
             const globalMean =
-            rtaRanking.reduce((s, r) => s + getActiveValue(r), 0) / rtaRanking.length;
+            rtaRanking.reduce((s, r) => s + getActiveValue(r, dataBySpec), 0) / rtaRanking.length;
 
             function getTierByRTA(avg) {
-            if (avg >= globalMean + 0.08) return { stars: 5, label: 'S', color: 'rgba(255,215,0,0.25)' };
-            if (avg >= globalMean + 0.04) return { stars: 4, label: 'A', color: 'rgba(76,175,80,0.25)' };
-            if (avg >= globalMean - 0.03) return { stars: 3, label: 'B', color: 'rgba(33,150,243,0.25)' };
-            if (avg >= globalMean - 0.08) return { stars: 2, label: 'C', color: 'rgba(255,152,0,0.25)' };
-            return { stars: 1, label: 'D', color: 'rgba(244,67,54,0.25)' };
-        }
+                if (avg >= globalMean + 0.08) return { stars: 5, label: 'S', color: 'rgba(255,215,0,0.25)' };
+                if (avg >= globalMean + 0.04) return { stars: 4, label: 'A', color: 'rgba(76,175,80,0.25)' };
+                if (avg >= globalMean - 0.03) return { stars: 3, label: 'B', color: 'rgba(33,150,243,0.25)' };
+                if (avg >= globalMean - 0.08) return { stars: 2, label: 'C', color: 'rgba(255,152,0,0.25)' };
+                return { stars: 1, label: 'D', color: 'rgba(244,67,54,0.25)' };
+            }
 
             rtaRanking.forEach((item, index) => {
-                item.tier = getTierByRTA(getActiveValue(item));
+                item.tier = getTierByRTA(getActiveValue(item, dataBySpec));
             });
 
             const tiersMap = {
@@ -417,7 +417,7 @@
             };
 
             rtaRanking.forEach(item => {
-                const tier = getTierByRTA(getActiveValue(item));
+                const tier = getTierByRTA(getActiveValue(item, dataBySpec));
                 tiersMap[tier.stars].push({
                     ...item,
                     tier
@@ -456,7 +456,7 @@ function renderTierVisualTable(tiersMap) {
                 }
 
                 for (const item of specs) {
-                    const activeVal = getActiveValue(item);
+                    const activeVal = getActiveValue(item, dataBySpec);
                     const delta = ((activeVal - globalMean) * 100).toFixed(1);
                     const warn = needsWarning(item.avgConsistency);
 
