@@ -321,7 +321,7 @@
         let currentSortKey = 'avg';
         let currentSortDirection = 'desc';
         let specPositions = {}; // Almacenar posiciones anteriores
-        let previousRankingByAvg = null; // Almacenar ranking anterior por promedio
+        let previousRankingByAvg = null; // Almacenar ranking anterior por promedio con índices
         let isFirstRender = true; // Bandera para primera renderización
         
         async function loadData() {
@@ -365,22 +365,28 @@
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
         }
 
-        function getPositionChange(specKey, rtaRankingByAvg) {
-            if (previousRankingByAvg === null || previousRankingByAvg.length === 0) {
+        function getPositionChange(specKey) {
+            if (previousRankingByAvg === null) {
                 return 0;
             }
             
-            const previousIndex = previousRankingByAvg.findIndex(item => item.specKey === specKey);
-            const currentIndex = rtaRankingByAvg.findIndex(item => item.specKey === specKey);
-            
-            if (previousIndex === -1) {
+            if (!previousRankingByAvg.hasOwnProperty(specKey)) {
                 return 0; // Nuevo spec
+            }
+            
+            const previousIndex = previousRankingByAvg[specKey];
+            // Obtenemos el índice actual desde el DOM
+            const currentElements = Array.from(document.querySelectorAll('.spec-icon[data-spec]'));
+            const currentIndex = currentElements.findIndex(el => el.dataset.spec === specKey);
+            
+            if (currentIndex === -1) {
+                return 0;
             }
             
             return previousIndex - currentIndex; // Positivo = subió, negativo = bajó
         }
 
-        function renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRankingByAvg) {
+        function renderTierVisualTable(tiersMap, dataBySpec, globalMean) {
             let html = `
             <div style="margin-bottom:12px;">
                 <button id="toggleTiers" class="tab-btn active">
@@ -414,7 +420,7 @@
                         const activeVal = getActiveValue(item, dataBySpec);
                         const delta = ((activeVal - globalMean) * 100).toFixed(1);
                         const warn = needsWarning(item.avgConsistency);
-                        const positionChange = getPositionChange(item.specKey, rtaRankingByAvg);
+                        const positionChange = getPositionChange(item.specKey);
                         
                         let positionChangeHtml = '';
                         if (positionChange > 0) {
@@ -672,14 +678,19 @@
 
             rtaHtml += '</tbody></table></div>';
 
-            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRankingByAvg);
+            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean);
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
             
             // Animar el movimiento de los specs
             animateSpecMovement();
             
-            // Guardar el ranking por promedio para la próxima comparación
-            previousRankingByAvg = rtaRankingByAvg.map(item => ({ specKey: item.specKey }));
+            // Guardar índices del ranking por promedio para la próxima comparación
+            if (previousRankingByAvg === null) {
+                previousRankingByAvg = {};
+            }
+            rtaRankingByAvg.forEach((item, index) => {
+                previousRankingByAvg[item.specKey] = index;
+            });
             isFirstRender = false;
             
             // Agregar event listeners después de renderizar
