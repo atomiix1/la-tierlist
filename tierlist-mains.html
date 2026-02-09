@@ -491,14 +491,14 @@ function renderTierVisualTable(tiersMap) {
             let rtaHtml = '<div class="table-wrapper"><table><thead><tr>';
             rtaHtml += '<th style="text-align:center;">#</th>';
             rtaHtml += '<th style="text-align:left;">Spec</th>';
-            const arrow = currentSortKey === key
-                ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
-                : '';
             for (const col of COLUMNS) {
                 const key = `${col.raid}${col.gate}Main`;
+                const arrow = currentSortKey === key
+                ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
+                : '';
                 rtaHtml += `<th class="sortable" data-key="${key}">${col.raid} ${col.gate} ${arrow}</th>`;
             }
-            rtaHtml += `<th class="sortable" data-key="avg">Promedio ${arrow}</th>`;
+            rtaHtml += `<th class="sortable" data-key="avg">Promedio</th>`;
 
             let pos = 1;
             for (const item of rtaRanking) {
