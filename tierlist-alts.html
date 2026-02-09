@@ -365,7 +365,7 @@
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
         }
 
-        function renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRankingByAvg) {
+        function renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRankingSorted) {
             let html = `
             <div style="margin-bottom:12px;">
                 <button id="toggleTiers" class="tab-btn active">
@@ -400,8 +400,8 @@
                         const delta = ((activeVal - globalMean) * 100).toFixed(1);
                         const warn = needsWarning(item.avgConsistency);
                         
-                        // Obtener posición en ranking actual
-                        const currentPosition = rtaRankingByAvg.findIndex(r => r.specKey === item.specKey) + 1;
+                        // Obtener posición en ranking actual (filtrado)
+                        const currentPosition = rtaRankingSorted.findIndex(r => r.specKey === item.specKey) + 1;
                         // Obtener posición en ranking average
                         const averagePosition = averageRankingPositions[item.specKey] || 0;
                         // Calcular diferencia (positivo = mejor en el actual)
@@ -568,16 +568,17 @@
                 return { specKey, avg, avgConsistency };
             });
 
-            // RANKING POR PROMEDIO (REFERENCIA)
+            // RANKING POR PROMEDIO (REFERENCIA - NUNCA CAMBIA)
             const rtaRankingByAvg = [...rtaRanking].sort((a, b) => b.avg - a.avg);
 
             // Guardar posiciones del ranking average SOLO en la primera renderización
             if (isFirstRender) {
                 rtaRankingByAvg.forEach((item, index) => {
-                    averageRankingPositions[item.specKey] = index + 1; // +1 porque es posición (1-indexed)
+                    averageRankingPositions[item.specKey] = index + 1;
                 });
             }
 
+            // RANKING ACTUAL 
             rtaRanking.sort((a, b) => {
                 let valA, valB;
 
@@ -667,7 +668,8 @@
 
             rtaHtml += '</tbody></table></div>';
 
-            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRankingByAvg);
+            // Pasar rtaRanking (ranking actual filtrado) a renderTierVisualTable
+            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRanking);
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
             
             animateSpecMovement();
