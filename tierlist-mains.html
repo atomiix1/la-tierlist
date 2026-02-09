@@ -116,10 +116,6 @@
         tr:hover {
             background-color: #404040;
         }
-
-        th.active-sort {
-            box-shadow: inset 0 -3px 0 #fff;
-        }
         
         .spec-name {
             text-align: left;
@@ -291,86 +287,6 @@
             }
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
         }
-
-        function animateTableReorder() {
-            const rows = Array.from(document.querySelectorAll('tbody tr'));
-
-            const firstPositions = new Map();
-            rows.forEach(row => {
-                firstPositions.set(row, row.getBoundingClientRect());
-            });
-
-            requestAnimationFrame(() => {
-                rows.forEach(row => {
-                    const last = row.getBoundingClientRect();
-                    const first = firstPositions.get(row);
-
-                    const deltaY = first.top - last.top;
-
-                    row.style.transition = 'none';
-                    row.style.transform = `translateY(${deltaY}px)`;
-
-                    requestAnimationFrame(() => {
-                        row.style.transition = 'transform 0.35s ease';
-                        row.style.transform = '';
-                    });
-                });
-            });
-        }
-
-        function reorderTable() {
-            const tbody = document.querySelector('tbody');
-            const rows = Array.from(tbody.querySelectorAll('tr'));
-
-            // Guardar posiciones iniciales
-            const firstPositions = new Map();
-            rows.forEach(row => {
-                firstPositions.set(row, row.getBoundingClientRect());
-            });
-
-            // Ordenar según currentSortKey
-            rows.sort((a, b) => {
-                const specA = a.dataset.spec;
-                const specB = b.dataset.spec;
-
-                let valA, valB;
-
-                if (currentSortKey === 'avg') {
-                    valA = parseFloat(a.querySelector('td:last-child').textContent);
-                    valB = parseFloat(b.querySelector('td:last-child').textContent);
-                } else {
-                    const index = Array.from(document.querySelectorAll('.sortable'))
-                        .findIndex(th => th.dataset.key === currentSortKey);
-
-                    valA = parseFloat(a.children[index + 2].textContent);
-                    valB = parseFloat(b.children[index + 2].textContent);
-                }
-
-                return currentSortDirection === 'desc'
-                    ? valB - valA
-                    : valA - valB;
-            });
-
-            // Reinsertar en nuevo orden
-            rows.forEach(row => tbody.appendChild(row));
-
-            // Animación FLIP
-            rows.forEach(row => {
-                const last = row.getBoundingClientRect();
-                const first = firstPositions.get(row);
-
-                const deltaY = first.top - last.top;
-
-                row.style.transition = 'none';
-                row.style.transform = `translateY(${deltaY}px)`;
-
-                requestAnimationFrame(() => {
-                    row.style.transition = 'transform 0.4s ease';
-                    row.style.transform = '';
-                });
-            });
-        }
-
         
         function renderTable() {
             const specs = new Set();
@@ -588,7 +504,7 @@ function renderTierVisualTable(tiersMap) {
             for (const item of rtaRanking) {
                 const { specKey, avg, tier } = item;
 
-                rtaHtml += `<tr data-spec="${specKey}" style="background-color:${tier.color};">`;
+                rtaHtml += `<tr style="background-color:${tier.color};">`;
                 rtaHtml += `<td style="text-align:center;font-weight:bold;">${pos}</td>`;
                 rtaHtml += `<td class="spec-name">${specKey}</td>`;
 
@@ -620,12 +536,7 @@ function renderTierVisualTable(tiersMap) {
                         currentSortDirection = 'desc';
                     }
 
-                    reorderTable();
-                    setTimeout(() => animateTableReorder(), 0);
-                    document.querySelectorAll('.sortable').forEach(th => 
-                        th.classList.remove('active-sort')
-                    );
-                    th.classList.add('active-sort');
+                    renderTable();
                 });
             });
         }
