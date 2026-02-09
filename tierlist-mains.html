@@ -321,7 +321,7 @@
         let currentSortKey = 'avg';
         let currentSortDirection = 'desc';
         let specPositions = {}; // Almacenar posiciones anteriores
-        let previousRanking = []; // Almacenar ranking anterior
+        let previousRankingByAvg = []; // Almacenar ranking anterior por promedio
         
         async function loadData() {
             try {
@@ -364,13 +364,13 @@
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
         }
 
-        function getPositionChange(specKey, rtaRanking) {
-            if (previousRanking.length === 0) {
+        function getPositionChange(specKey, rtaRankingByAvg) {
+            if (previousRankingByAvg.length === 0) {
                 return 0;
             }
             
-            const previousIndex = previousRanking.findIndex(item => item.specKey === specKey);
-            const currentIndex = rtaRanking.findIndex(item => item.specKey === specKey);
+            const previousIndex = previousRankingByAvg.findIndex(item => item.specKey === specKey);
+            const currentIndex = rtaRankingByAvg.findIndex(item => item.specKey === specKey);
             
             if (previousIndex === -1) {
                 return 0; // Nuevo spec
@@ -379,7 +379,7 @@
             return previousIndex - currentIndex; // Positivo = subió, negativo = bajó
         }
 
-        function renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRanking) {
+        function renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRankingByAvg) {
             let html = `
             <div style="margin-bottom:12px;">
                 <button id="toggleTiers" class="tab-btn active">
@@ -413,14 +413,14 @@
                         const activeVal = getActiveValue(item, dataBySpec);
                         const delta = ((activeVal - globalMean) * 100).toFixed(1);
                         const warn = needsWarning(item.avgConsistency);
-                        const positionChange = getPositionChange(item.specKey, rtaRanking);
+                        const positionChange = getPositionChange(item.specKey, rtaRankingByAvg);
                         
                         let positionChangeHtml = '';
                         if (positionChange > 0) {
                             positionChangeHtml = `<div class="position-change up">↑ ${positionChange}</div>`;
                         } else if (positionChange < 0) {
                             positionChangeHtml = `<div class="position-change down">↓ ${Math.abs(positionChange)}</div>`;
-                        } else if (previousRanking.length > 0) {
+                        } else if (previousRankingByAvg.length > 0) {
                             positionChangeHtml = `<div class="position-change neutral">→</div>`;
                         }
 
@@ -432,7 +432,7 @@
             RTA medio: ${activeVal.toFixed(3)}
             Δ vs ${globalMean.toFixed(2)}: ${delta}%
             Variabilidad: ${item.avgConsistency.toFixed(2)}
-            Cambio de posición: ${positionChange > 0 ? '+' : ''}${positionChange}
+            Cambio de posición (vs promedio): ${positionChange > 0 ? '+' : ''}${positionChange}
                             ">
                             <img src="${specToImagePath(item.specKey)}"
                                 alt="${item.specKey}">
@@ -579,6 +579,9 @@
                 return { specKey, avg, avgConsistency };
             });
 
+            // Crear ranking por promedio para comparación
+            const rtaRankingByAvg = [...rtaRanking].sort((a, b) => b.avg - a.avg);
+
             rtaRanking.sort((a, b) => {
                 let valA, valB;
 
@@ -668,14 +671,14 @@
 
             rtaHtml += '</tbody></table></div>';
 
-            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRanking);
+            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRankingByAvg);
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
             
             // Animar el movimiento de los specs
             animateSpecMovement();
             
-            // Guardar el ranking actual como anterior para la próxima renderización
-            previousRanking = rtaRanking.map(item => ({ specKey: item.specKey }));
+            // Guardar el ranking por promedio para la próxima comparación
+            previousRankingByAvg = rtaRankingByAvg.map(item => ({ specKey: item.specKey }));
             
             // Agregar event listeners después de renderizar
             document.querySelectorAll('.sortable').forEach(th => {
