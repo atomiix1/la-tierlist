@@ -347,7 +347,7 @@
                 for (const col of COLUMNS) {
                     for (const range of GEAR_RANGES) {
                         const key = getFileKey(col.raid, col.gate, range);
-                        const fileName = `${col.raid}${col.gate}${range.min}${range.max}`;
+                        const fileName = `${col.raid.toLowerCase()}${col.gate}${range.min}${range.max}`;
                         const response = await fetch(`tierlist/${fileName}.json`);
                         if (response.ok) {
                             allData[key] = {
