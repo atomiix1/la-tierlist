@@ -297,8 +297,8 @@
         <div class="legend">
             <div class="legend-item"><strong>Índice de Dificultad (DI):</strong> Combinación ponderada de: IQR_rel (0.5), Skill Gap (0.3), Ratio UpperWhisker (0.2)</div>
             <div class="legend-item"><strong>IQR_rel:</strong> (Q3 - Q1) / Mediana - Variabilidad relativa</div>
-            <div class="legend-item"><strong>Skill Gap:</strong> Max / Mediana - Diferencia de rendimiento máximo</div>
-            <div class="legend-item"><strong>Ratio UpperWhisker:</strong> (UpperWhisker - Mediana) / Mediana</div>
+            <div class="legend-item"><strong>Skill Gap (SG):</strong> Max / Mediana - Diferencia de rendimiento máximo</div>
+            <div class="legend-item"><strong>Ratio UpperWhisker (RUW):</strong> (UpperWhisker - Mediana) / Mediana</div>
             <div class="legend-item"><strong>DI:</strong> 0.5 × IQR_rel + 0.3 × Skill Gap + 0.2 × Ratio UpperWhisker</div>
             <div class="legend-item"><strong>DI Final:</strong> Promedio ponderado por número de intentos (count) en cada rango de gear score</div>
             <div class="legend-item">Mayor DI = Mayor dificultad en la especialización</div>
@@ -327,14 +327,15 @@
         let specPositions = {};
         let isFirstRender = true;
         
-        function calculateDifficultyIndex(q1, median, q3, max, upperWhisker) {
-            if (median === 0) return 0;
+        function calculateDifficultyComponents(q1, median, q3, max, upperWhisker) {
+            if (median === 0) return { iqr_rel: 0, sg: 0, ruw: 0, di: 0 };
             
             const iqr_rel = (q3 - q1) / median;
             const sg = max / median;
             const ruw = (upperWhisker - median) / median;
+            const di = 0.5 * iqr_rel + 0.3 * sg + 0.2 * ruw;
             
-            return 0.5 * iqr_rel + 0.3 * sg + 0.2 * ruw;
+            return { iqr_rel, sg, ruw, di };
         }
 
         function getFileKey(raid, gate, range) {
@@ -347,7 +348,7 @@
                 for (const col of COLUMNS) {
                     for (const range of GEAR_RANGES) {
                         const key = getFileKey(col.raid, col.gate, range);
-                        const fileName = `${col.raid.toLowerCase()}${col.gate}${range.min}${range.max}`;
+                        const fileName = `${col.raid}${col.gate}${range.min}${range.max}`;
                         const response = await fetch(`tierlist/${fileName}.json`);
                         if (response.ok) {
                             allData[key] = {
@@ -482,7 +483,7 @@ Intentos totales: ${item.totalCount}
                                 dataBySpec[specKey] = { raids: {} };
                             }
                             
-                            const di = calculateDifficultyIndex(
+                            const components = calculateDifficultyComponents(
                                 stat.q1, 
                                 stat.median, 
                                 stat.q3, 
@@ -496,8 +497,11 @@ Intentos totales: ${item.totalCount}
                             
                             const raidKey = `${col.raid}${col.gate}${range.label}`;
                             dataBySpec[specKey].raids[raidKey] = {
-                                di: di,
-                                count: stat.count
+                                di: components.di,
+                                count: stat.count,
+                                iqr_rel: components.iqr_rel,
+                                sg: components.sg,
+                                ruw: components.ruw
                             };
                         }
                     }
@@ -609,8 +613,19 @@ Intentos totales: ${item.totalCount}
                         const raidKey = `${col.raid}${col.gate}${range.label}`;
                         const val = spec.raids[raidKey];
                         const diValue = val ? val.di.toFixed(3) : '-';
-                        const countValue = val ? val.count : '-';
-                        diHtml += `<td class="difficulty-value" title="Count: ${countValue}">${diValue}</td>`;
+                        
+                        let tooltipText = '';
+                        if (val) {
+                            tooltipText = `DI: ${val.di.toFixed(3)}
+IQR_rel: ${val.iqr_rel.toFixed(3)}
+SG: ${val.sg.toFixed(3)}
+RUW: ${val.ruw.toFixed(3)}
+Count: ${val.count}`;
+                        } else {
+                            tooltipText = 'Sin datos';
+                        }
+                        
+                        diHtml += `<td class="difficulty-value" title="${tooltipText}">${diValue}</td>`;
                     }
                 }
 
