@@ -300,7 +300,7 @@
             <div class="legend-item"><strong>Skill Gap:</strong> Max / Mediana - Diferencia de rendimiento máximo</div>
             <div class="legend-item"><strong>Ratio UpperWhisker:</strong> (UpperWhisker - Mediana) / Mediana</div>
             <div class="legend-item"><strong>DI:</strong> 0.5 × IQR_rel + 0.3 × Skill Gap + 0.2 × Ratio UpperWhisker</div>
-            <div class="legend-item">Los datos están separados por rangos de gear score: 1730-1740 y 1740-1750</div>
+            <div class="legend-item"><strong>DI Final:</strong> Promedio ponderado por número de intentos (count) en cada rango de gear score</div>
             <div class="legend-item">Mayor DI = Mayor dificultad en la especialización</div>
         </div>
     </div>
@@ -407,6 +407,7 @@
                             data-spec="${item.specKey}"
                             title="${item.specKey}
 DI Final: ${item.di_final.toFixed(3)}
+Intentos totales: ${item.totalCount}
 Δ vs ${globalMeanDI.toFixed(2)}: ${delta}%">
                             <img src="${specToImagePath(item.specKey)}"
                                 alt="${item.specKey}">
@@ -478,7 +479,7 @@ DI Final: ${item.di_final.toFixed(3)}
                             specs.add(specKey);
                             
                             if (!dataBySpec[specKey]) {
-                                dataBySpec[specKey] = { ranges: {} };
+                                dataBySpec[specKey] = { raids: {} };
                             }
                             
                             const di = calculateDifficultyIndex(
@@ -489,41 +490,40 @@ DI Final: ${item.di_final.toFixed(3)}
                                 stat.upperWhisker
                             );
                             
-                            if (!dataBySpec[specKey].ranges[range.label]) {
-                                dataBySpec[specKey].ranges[range.label] = [];
-                            }
-                            dataBySpec[specKey].ranges[range.label].push(di);
-                            
                             if (!dataBySpec[specKey].raids) {
                                 dataBySpec[specKey].raids = {};
                             }
                             
                             const raidKey = `${col.raid}${col.gate}${range.label}`;
-                            dataBySpec[specKey].raids[raidKey] = di;
+                            dataBySpec[specKey].raids[raidKey] = {
+                                di: di,
+                                count: stat.count
+                            };
                         }
                     }
                 }
             }
 
-            // Calcular DI Final para cada spec (promedio de todos los raids y rangos)
+            // Calcular DI Final para cada spec (promedio ponderado por count)
             const ranking = [];
             for (const specKey of specs) {
                 const spec = dataBySpec[specKey];
-                let totalDI = 0;
+                let totalWeightedDI = 0;
                 let totalCount = 0;
 
                 for (const col of COLUMNS) {
                     for (const range of GEAR_RANGES) {
                         const raidKey = `${col.raid}${col.gate}${range.label}`;
                         if (spec.raids[raidKey] !== undefined) {
-                            totalDI += spec.raids[raidKey];
-                            totalCount++;
+                            const { di, count } = spec.raids[raidKey];
+                            totalWeightedDI += di * count;
+                            totalCount += count;
                         }
                     }
                 }
 
-                const di_final = totalCount > 0 ? totalDI / totalCount : 0;
-                ranking.push({ specKey, di_final, spec });
+                const di_final = totalCount > 0 ? totalWeightedDI / totalCount : 0;
+                ranking.push({ specKey, di_final, spec, totalCount });
             }
 
             // Ordenar según el criterio actual
@@ -535,8 +535,8 @@ DI Final: ${item.di_final.toFixed(3)}
                 });
             } else {
                 ranking.sort((a, b) => {
-                    const valA = a.spec.raids[currentSortKey] || 0;
-                    const valB = b.spec.raids[currentSortKey] || 0;
+                    const valA = a.spec.raids[currentSortKey]?.di || 0;
+                    const valB = b.spec.raids[currentSortKey]?.di || 0;
                     return currentSortDirection === 'desc'
                         ? valB - valA
                         : valA - valB;
@@ -592,12 +592,13 @@ DI Final: ${item.di_final.toFixed(3)}
                 ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
                 : '';
             diHtml += `<th class="sortable" data-key="di_final">DI Final ${avgArrow}</th>`;
+            diHtml += `<th>Intentos</th>`;
             diHtml += `<th>Tier</th>`;
             diHtml += '</tr></thead><tbody>';
 
             let pos = 1;
             for (const item of ranking) {
-                const { specKey, di_final, tier, spec } = item;
+                const { specKey, di_final, tier, spec, totalCount } = item;
 
                 diHtml += `<tr style="background-color:${tier.color};">`;
                 diHtml += `<td style="text-align:center;font-weight:bold;">${pos}</td>`;
@@ -607,11 +608,14 @@ DI Final: ${item.di_final.toFixed(3)}
                     for (const range of GEAR_RANGES) {
                         const raidKey = `${col.raid}${col.gate}${range.label}`;
                         const val = spec.raids[raidKey];
-                        diHtml += `<td class="difficulty-value">${val !== undefined ? val.toFixed(3) : '-'}</td>`;
+                        const diValue = val ? val.di.toFixed(3) : '-';
+                        const countValue = val ? val.count : '-';
+                        diHtml += `<td class="difficulty-value" title="Count: ${countValue}">${diValue}</td>`;
                     }
                 }
 
                 diHtml += `<td style="font-weight:bold;">${di_final.toFixed(3)}</td>`;
+                diHtml += `<td style="text-align:center;">${totalCount}</td>`;
                 diHtml += `<td style="font-weight:bold;">${'⭐'.repeat(tier.stars)}</td>`;
                 diHtml += '</tr>';
 
