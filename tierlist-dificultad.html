@@ -295,11 +295,11 @@
         <div id="content" class="loading">Cargando datos...</div>
         
         <div class="legend">
-            <div class="legend-item"><strong>Índice de Dificultad (DI):</strong> Combinación ponderada de: IQR_rel (0.5), Skill Gap (0.3), Ratio UpperWhisker (0.2)</div>
-            <div class="legend-item"><strong>IQR_rel:</strong> (Q3 - Q1) / Mediana - Variabilidad relativa</div>
-            <div class="legend-item"><strong>Skill Gap (SG):</strong> Max / Mediana - Diferencia de rendimiento máximo</div>
-            <div class="legend-item"><strong>Ratio UpperWhisker (RUW):</strong> (UpperWhisker - Mediana) / Mediana</div>
-            <div class="legend-item"><strong>DI:</strong> 0.5 × IQR_rel + 0.3 × Skill Gap + 0.2 × Ratio UpperWhisker</div>
+            <div class="legend-item"><strong>Índice de Dificultad (DI):</strong> Combinación ponderada de componentes normalizados con z-score</div>
+            <div class="legend-item"><strong>IQR_rel (Z-normalizado):</strong> (Q3 - Q1) / Mediana - Variabilidad relativa</div>
+            <div class="legend-item"><strong>Skill Gap SG (Z-normalizado):</strong> Max / Mediana - Diferencia de rendimiento máximo</div>
+            <div class="legend-item"><strong>Ratio UpperWhisker RUW (Z-normalizado):</strong> (UpperWhisker - Mediana) / Mediana</div>
+            <div class="legend-item"><strong>DI:</strong> 0.5 × Z(IQR_rel) + 0.3 × Z(SG) + 0.2 × Z(RUW)</div>
             <div class="legend-item"><strong>DI Final:</strong> Promedio ponderado por número de intentos (count) en cada rango de gear score</div>
             <div class="legend-item">Mayor DI = Mayor dificultad en la especialización</div>
         </div>
@@ -326,6 +326,13 @@
         let currentSortDirection = 'desc';
         let specPositions = {};
         let isFirstRender = true;
+
+        // Estadísticas globales para normalización
+        let zScoreStats = {
+            iqr_rel: { mean: 0, stdDev: 1 },
+            sg: { mean: 0, stdDev: 1 },
+            ruw: { mean: 0, stdDev: 1 }
+        };
         
         function calculateDifficultyComponents(q1, median, q3, max, upperWhisker) {
             if (median === 0) return { iqr_rel: 0, sg: 0, ruw: 0, di: 0 };
@@ -333,9 +340,23 @@
             const iqr_rel = (q3 - q1) / median;
             const sg = max / median;
             const ruw = (upperWhisker - median) / median;
-            const di = 0.5 * iqr_rel + 0.3 * sg + 0.2 * ruw;
             
-            return { iqr_rel, sg, ruw, di };
+            return { iqr_rel, sg, ruw, di: 0 }; // DI se calcula después de normalizar
+        }
+
+        function calculateZScore(value, mean, stdDev) {
+            if (stdDev === 0) return 0;
+            return (value - mean) / stdDev;
+        }
+
+        function calculateDifficultyIndexNormalized(iqr_rel, sg, ruw) {
+            const z_iqr = calculateZScore(iqr_rel, zScoreStats.iqr_rel.mean, zScoreStats.iqr_rel.stdDev);
+            const z_sg = calculateZScore(sg, zScoreStats.sg.mean, zScoreStats.sg.stdDev);
+            const z_ruw = calculateZScore(ruw, zScoreStats.ruw.mean, zScoreStats.ruw.stdDev);
+            
+            const di = 0.5 * z_iqr + 0.3 * z_sg + 0.2 * z_ruw;
+            
+            return { di, z_iqr, z_sg, z_ruw };
         }
 
         function getFileKey(raid, gate, range) {
@@ -358,11 +379,49 @@
                         }
                     }
                 }
+                calculateZScoreStats();
                 renderTable();
             } catch (error) {
                 document.getElementById('content').innerHTML = `<div class="error">Error al cargar datos: ${error.message}</div>`;
                 console.error(error);
             }
+        }
+
+        function calculateZScoreStats() {
+            const allIqrRels = [];
+            const allSGs = [];
+            const allRUWs = [];
+
+            // Recolectar todos los valores
+            for (const col of COLUMNS) {
+                for (const range of GEAR_RANGES) {
+                    const key = getFileKey(col.raid, col.gate, range);
+                    const loadedData = allData[key];
+                    
+                    if (loadedData && loadedData.data && loadedData.data.stats) {
+                        for (const stat of loadedData.data.stats) {
+                            const components = calculateDifficultyComponents(
+                                stat.q1, stat.median, stat.q3, stat.max, stat.upperWhisker
+                            );
+                            allIqrRels.push(components.iqr_rel);
+                            allSGs.push(components.sg);
+                            allRUWs.push(components.ruw);
+                        }
+                    }
+                }
+            }
+
+            // Calcular media y desviación estándar
+            const calculateStats = (values) => {
+                const mean = values.reduce((a, b) => a + b, 0) / values.length;
+                const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length;
+                const stdDev = Math.sqrt(variance);
+                return { mean, stdDev };
+            };
+
+            zScoreStats.iqr_rel = calculateStats(allIqrRels);
+            zScoreStats.sg = calculateStats(allSGs);
+            zScoreStats.ruw = calculateStats(allRUWs);
         }
 
         function specToImagePath(specKey) {
@@ -491,17 +550,26 @@ Intentos totales: ${item.totalCount}
                                 stat.upperWhisker
                             );
                             
+                            const normalized = calculateDifficultyIndexNormalized(
+                                components.iqr_rel,
+                                components.sg,
+                                components.ruw
+                            );
+                            
                             if (!dataBySpec[specKey].raids) {
                                 dataBySpec[specKey].raids = {};
                             }
                             
                             const raidKey = `${col.raid}${col.gate}${range.label}`;
                             dataBySpec[specKey].raids[raidKey] = {
-                                di: components.di,
+                                di: normalized.di,
                                 count: stat.count,
                                 iqr_rel: components.iqr_rel,
                                 sg: components.sg,
-                                ruw: components.ruw
+                                ruw: components.ruw,
+                                z_iqr: normalized.z_iqr,
+                                z_sg: normalized.z_sg,
+                                z_ruw: normalized.z_ruw
                             };
                         }
                     }
@@ -617,9 +685,9 @@ Intentos totales: ${item.totalCount}
                         let tooltipText = '';
                         if (val) {
                             tooltipText = `DI: ${val.di.toFixed(3)}
-IQR_rel: ${val.iqr_rel.toFixed(3)}
-SG: ${val.sg.toFixed(3)}
-RUW: ${val.ruw.toFixed(3)}
+IQR_rel: ${val.iqr_rel.toFixed(3)} (Z: ${val.z_iqr.toFixed(3)})
+SG: ${val.sg.toFixed(3)} (Z: ${val.z_sg.toFixed(3)})
+RUW: ${val.ruw.toFixed(3)} (Z: ${val.z_ruw.toFixed(3)})
 Count: ${val.count}`;
                         } else {
                             tooltipText = 'Sin datos';
