@@ -281,6 +281,11 @@
             font-family: 'Courier New', monospace;
             color: #ffb74d;
         }
+
+        .difficulty-value.filtered {
+            opacity: 0.4;
+            text-decoration: line-through;
+        }
         
         .loading {
             text-align: center;
@@ -367,7 +372,7 @@
 
         <div class="filter-section">
             <div class="filter-group">
-                <label for="minAttemppts">Mínimo de intentos:</label>
+                <label for="minAttemppts">Mínimo de intentos por puerta:</label>
                 <select id="minAttempts">
                     <option value="0">Todos (≥0)</option>
                     <option value="50" selected>≥50</option>
@@ -407,9 +412,9 @@
             <div class="legend-item"><strong>Skill Gap SG (Z-normalizado):</strong> Max / Mediana - Diferencia de rendimiento máximo</div>
             <div class="legend-item"><strong>Ratio UpperWhisker RUW (Z-normalizado):</strong> (UpperWhisker - Mediana) / Mediana</div>
             <div class="legend-item"><strong>DI:</strong> 0.5 × Z(IQR_rel) + 0.3 × Z(SG) + 0.2 × Z(RUW)</div>
-            <div class="legend-item"><strong>DI Final:</strong> Promedio ponderado por número de intentos (count) en cada rango de gear score</div>
+            <div class="legend-item"><strong>DI Final:</strong> Promedio ponderado por número de intentos (count) en cada puerta, solo usando datos que cumplen el mínimo de intentos</div>
             <div class="legend-item"><strong>Tiers:</strong> S (DI ≥ +1.5σ) | A (+1.0σ ≤ DI < +1.5σ) | B (-0.5σ ≤ DI < +1.0σ) | C (-1.0σ ≤ DI < -0.5σ) | D (DI < -1.0σ)</div>
-            <div class="legend-item">Mayor DI = Mayor dificultad en la especialización | Solo se muestran especialidades con el mínimo de intentos requerido</div>
+            <div class="legend-item">Mayor DI = Mayor dificultad en la especialización | Los valores tachados no cumplen el mínimo de intentos requerido</div>
         </div>
     </div>
     
@@ -700,7 +705,7 @@ Intentos totales: ${item.totalCount}
                             specs.add(specKey);
                             
                             if (!dataBySpec[specKey]) {
-                                dataBySpec[specKey] = { raids: {}, totalCount: 0 };
+                                dataBySpec[specKey] = { raids: {} };
                             }
                             
                             const components = calculateDifficultyComponents(
@@ -730,29 +735,23 @@ Intentos totales: ${item.totalCount}
                                 ruw: components.ruw,
                                 z_iqr: normalized.z_iqr,
                                 z_sg: normalized.z_sg,
-                                z_ruw: normalized.z_ruw
+                                z_ruw: normalized.z_ruw,
+                                isValid: stat.count >= minAttempts
                             };
-                            
-                            dataBySpec[specKey].totalCount += stat.count;
                         }
                     }
                 }
             }
 
-            // Calcular DI Final y filtrar por intentos mínimos
+            // Calcular DI Final solo con datos válidos (que cumplen el mínimo de intentos)
             const ranking = [];
             let filteredOut = 0;
             for (const specKey of specs) {
                 const spec = dataBySpec[specKey];
                 
-                // Filtrar por intentos mínimos
-                if (spec.totalCount < minAttempts) {
-                    filteredOut++;
-                    continue;
-                }
-
                 let totalWeightedDI = 0;
                 let totalCount = 0;
+                let hasValidData = false;
 
                 for (const col of COLUMNS) {
                     for (const range of GEAR_RANGES) {
@@ -760,11 +759,22 @@ Intentos totales: ${item.totalCount}
 
                         const raidKey = `${col.raid}${col.gate}${range.label}`;
                         if (spec.raids[raidKey] !== undefined) {
-                            const { di, count } = spec.raids[raidKey];
-                            totalWeightedDI += di * count;
-                            totalCount += count;
+                            const { di, count, isValid } = spec.raids[raidKey];
+                            
+                            // Solo incluir datos válidos en el cálculo del DI Final
+                            if (isValid) {
+                                totalWeightedDI += di * count;
+                                totalCount += count;
+                                hasValidData = true;
+                            }
                         }
                     }
+                }
+
+                // Solo mostrar specs que tengan al menos un dato válido
+                if (!hasValidData) {
+                    filteredOut++;
+                    continue;
                 }
 
                 const di_final = totalCount > 0 ? totalWeightedDI / totalCount : 0;
@@ -842,7 +852,6 @@ Intentos totales: ${item.totalCount}
                 ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
                 : '';
             diHtml += `<th class="sortable" data-key="di_final">DI Final ${avgArrow}</th>`;
-            diHtml += `<th>Intentos</th>`;
             diHtml += `<th>Tier</th>`;
             diHtml += '</tr></thead><tbody>';
 
@@ -862,24 +871,26 @@ Intentos totales: ${item.totalCount}
                         const raidKey = `${col.raid}${col.gate}${range.label}`;
                         const val = spec.raids[raidKey];
                         const diValue = val ? val.di.toFixed(3) : '-';
+                        const isFiltered = val && !val.isValid;
                         
                         let tooltipText = '';
                         if (val) {
+                            const validMark = val.isValid ? '' : ' (FILTRADO)';
                             tooltipText = `DI: ${val.di.toFixed(3)}
 IQR_rel: ${val.iqr_rel.toFixed(3)} (Z: ${val.z_iqr.toFixed(3)})
 SG: ${val.sg.toFixed(3)} (Z: ${val.z_sg.toFixed(3)})
 RUW: ${val.ruw.toFixed(3)} (Z: ${val.z_ruw.toFixed(3)})
-Count: ${val.count}`;
+Count: ${val.count}${validMark}`;
                         } else {
                             tooltipText = 'Sin datos';
                         }
                         
-                        diHtml += `<td class="difficulty-value" title="${tooltipText}">${diValue}</td>`;
+                        const cellClass = isFiltered ? 'difficulty-value filtered' : 'difficulty-value';
+                        diHtml += `<td class="${cellClass}" title="${tooltipText}">${diValue}</td>`;
                     }
                 }
 
                 diHtml += `<td style="font-weight:bold;" title="Z-Score: ${zScoreFinal.toFixed(2)}">${di_final.toFixed(3)}</td>`;
-                diHtml += `<td style="text-align:center;">${totalCount}</td>`;
                 diHtml += `<td style="font-weight:bold;">${'⭐'.repeat(tier.stars)}</td>`;
                 diHtml += '</tr>';
 
@@ -923,7 +934,7 @@ Count: ${val.count}`;
         function updateFilterInfo(visible, filtered) {
             const info = document.getElementById('filterInfo');
             const rangesText = Array.from(selectedRanges).join(', ');
-            info.innerHTML = `<strong>Filtros activos:</strong> Mínimo ${minAttempts} intentos | Rangos: ${rangesText} | Mostrando ${visible} de ${visible + filtered} especialidades`;
+            info.innerHTML = `<strong>Filtros activos:</strong> Mínimo ${minAttempts} intentos por puerta | Rangos: ${rangesText} | Mostrando ${visible} de ${visible + filtered} especialidades`;
         }
         
         loadData();
