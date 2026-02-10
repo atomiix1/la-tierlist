@@ -28,6 +28,69 @@
             margin-bottom: 30px;
             color: #fff;
         }
+
+        .filter-section {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #2d2d2d;
+            border-radius: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .filter-group label {
+            font-size: 12px;
+            color: #b0b0b0;
+            font-weight: bold;
+        }
+
+        .filter-group select {
+            padding: 8px 12px;
+            background-color: #353535;
+            color: #e0e0e0;
+            border: 1px solid #454545;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .filter-group select:hover {
+            background-color: #404040;
+        }
+
+        .filter-group input[type="checkbox"] {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+            margin-top: 5px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        .checkbox-item label {
+            margin: 0;
+            font-size: 13px;
+            cursor: pointer;
+        }
         
         .tabs {
             display: flex;
@@ -285,12 +348,56 @@
         #tierVisualContainer tr {
             transition: background-color 0.3s ease;
         }
+
+        .filter-info {
+            font-size: 12px;
+            color: #ffb74d;
+            padding: 8px 12px;
+            background-color: #2d2d2d;
+            border-left: 3px solid #ffb74d;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <a href="tierlist-mains.html" class="back-link">← Mains</a>
         <h1>Tierlist DPS - Dificultad</h1>
+
+        <div class="filter-section">
+            <div class="filter-group">
+                <label for="minAttemppts">Mínimo de intentos:</label>
+                <select id="minAttempts">
+                    <option value="0">Todos (≥0)</option>
+                    <option value="50" selected>≥50</option>
+                    <option value="100">≥100</option>
+                    <option value="200">≥200</option>
+                    <option value="500">≥500</option>
+                    <option value="1000">≥1000</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label>Rangos de Gear Score:</label>
+                <div class="checkbox-group">
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="allRanges" checked>
+                        <label for="allRanges">Todos</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="range1730" checked>
+                        <label for="range1730">1730-1740</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="range1740" checked>
+                        <label for="range1740">1740-1750</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="filterInfo" class="filter-info"></div>
         
         <div id="content" class="loading">Cargando datos...</div>
         
@@ -302,7 +409,7 @@
             <div class="legend-item"><strong>DI:</strong> 0.5 × Z(IQR_rel) + 0.3 × Z(SG) + 0.2 × Z(RUW)</div>
             <div class="legend-item"><strong>DI Final:</strong> Promedio ponderado por número de intentos (count) en cada rango de gear score</div>
             <div class="legend-item"><strong>Tiers:</strong> S (DI ≥ +1.5σ) | A (+1.0σ ≤ DI < +1.5σ) | B (-0.5σ ≤ DI < +1.0σ) | C (-1.0σ ≤ DI < -0.5σ) | D (DI < -1.0σ)</div>
-            <div class="legend-item">Mayor DI = Mayor dificultad en la especialización</div>
+            <div class="legend-item">Mayor DI = Mayor dificultad en la especialización | Solo se muestran especialidades con el mínimo de intentos requerido</div>
         </div>
     </div>
     
@@ -322,18 +429,22 @@
             { min: 1740, max: 1750, label: '1740-1750' }
         ];
 
+        const MIN_ATTEMPTS_DEFAULT = 50;
+
         let allData = {};
         let currentSortKey = 'di_final';
         let currentSortDirection = 'desc';
         let specPositions = {};
         let isFirstRender = true;
+        let selectedRanges = new Set(['1730-1740', '1740-1750']);
+        let minAttempts = MIN_ATTEMPTS_DEFAULT;
 
         // Estadísticas globales para normalización
         let zScoreStats = {
             iqr_rel: { mean: 0, stdDev: 1 },
             sg: { mean: 0, stdDev: 1 },
             ruw: { mean: 0, stdDev: 1 },
-            di_final: { mean: 0, stdDev: 1 } // Para calcular tiers basados en desviaciones estándar
+            di_final: { mean: 0, stdDev: 1 }
         };
         
         function calculateDifficultyComponents(q1, median, q3, max, upperWhisker) {
@@ -343,7 +454,7 @@
             const sg = max / median;
             const ruw = (upperWhisker - median) / median;
             
-            return { iqr_rel, sg, ruw, di: 0 }; // DI se calcula después de normalizar
+            return { iqr_rel, sg, ruw, di: 0 };
         }
 
         function calculateZScore(value, mean, stdDev) {
@@ -383,10 +494,57 @@
                 }
                 calculateZScoreStats();
                 renderTable();
+                setupEventListeners();
             } catch (error) {
                 document.getElementById('content').innerHTML = `<div class="error">Error al cargar datos: ${error.message}</div>`;
                 console.error(error);
             }
+        }
+
+        function setupEventListeners() {
+            document.getElementById('minAttempts').addEventListener('change', (e) => {
+                minAttempts = parseInt(e.target.value);
+                renderTable();
+            });
+
+            document.getElementById('allRanges').addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    selectedRanges.add('1730-1740');
+                    selectedRanges.add('1740-1750');
+                    document.getElementById('range1730').checked = true;
+                    document.getElementById('range1740').checked = true;
+                } else {
+                    selectedRanges.clear();
+                    document.getElementById('range1730').checked = false;
+                    document.getElementById('range1740').checked = false;
+                }
+                renderTable();
+            });
+
+            document.getElementById('range1730').addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    selectedRanges.add('1730-1740');
+                } else {
+                    selectedRanges.delete('1730-1740');
+                }
+                updateAllRangesCheckbox();
+                renderTable();
+            });
+
+            document.getElementById('range1740').addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    selectedRanges.add('1740-1750');
+                } else {
+                    selectedRanges.delete('1740-1750');
+                }
+                updateAllRangesCheckbox();
+                renderTable();
+            });
+        }
+
+        function updateAllRangesCheckbox() {
+            const allCheckbox = document.getElementById('allRanges');
+            allCheckbox.checked = selectedRanges.size === 2;
         }
 
         function calculateZScoreStats() {
@@ -394,7 +552,6 @@
             const allSGs = [];
             const allRUWs = [];
 
-            // Recolectar todos los valores para calcular stats
             for (const col of COLUMNS) {
                 for (const range of GEAR_RANGES) {
                     const key = getFileKey(col.raid, col.gate, range);
@@ -413,7 +570,6 @@
                 }
             }
 
-            // Calcular media y desviación estándar
             const calculateStats = (values) => {
                 const mean = values.reduce((a, b) => a + b, 0) / values.length;
                 const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length;
@@ -530,9 +686,11 @@ Intentos totales: ${item.totalCount}
             const specs = new Set();
             const dataBySpec = {};
 
-            // Recolectar todos los specs y calcular DI por rango
+            // Recolectar todos los specs y calcular DI por rango (solo rangos seleccionados)
             for (const col of COLUMNS) {
                 for (const range of GEAR_RANGES) {
+                    if (!selectedRanges.has(range.label)) continue;
+
                     const key = getFileKey(col.raid, col.gate, range);
                     const loadedData = allData[key];
                     
@@ -542,7 +700,7 @@ Intentos totales: ${item.totalCount}
                             specs.add(specKey);
                             
                             if (!dataBySpec[specKey]) {
-                                dataBySpec[specKey] = { raids: {} };
+                                dataBySpec[specKey] = { raids: {}, totalCount: 0 };
                             }
                             
                             const components = calculateDifficultyComponents(
@@ -574,20 +732,32 @@ Intentos totales: ${item.totalCount}
                                 z_sg: normalized.z_sg,
                                 z_ruw: normalized.z_ruw
                             };
+                            
+                            dataBySpec[specKey].totalCount += stat.count;
                         }
                     }
                 }
             }
 
-            // Calcular DI Final para cada spec (promedio ponderado por count)
+            // Calcular DI Final y filtrar por intentos mínimos
             const ranking = [];
+            let filteredOut = 0;
             for (const specKey of specs) {
                 const spec = dataBySpec[specKey];
+                
+                // Filtrar por intentos mínimos
+                if (spec.totalCount < minAttempts) {
+                    filteredOut++;
+                    continue;
+                }
+
                 let totalWeightedDI = 0;
                 let totalCount = 0;
 
                 for (const col of COLUMNS) {
                     for (const range of GEAR_RANGES) {
+                        if (!selectedRanges.has(range.label)) continue;
+
                         const raidKey = `${col.raid}${col.gate}${range.label}`;
                         if (spec.raids[raidKey] !== undefined) {
                             const { di, count } = spec.raids[raidKey];
@@ -598,12 +768,15 @@ Intentos totales: ${item.totalCount}
                 }
 
                 const di_final = totalCount > 0 ? totalWeightedDI / totalCount : 0;
-                ranking.push({ specKey, di_final, spec, totalCount });
+                ranking.push({ specKey, di_final, spec, totalCount: totalCount });
             }
 
+            // Actualizar info de filtro
+            updateFilterInfo(ranking.length, filteredOut);
+
             // Calcular media y desviación estándar del DI Final para los tiers
-            const diMeanFinal = ranking.reduce((sum, r) => sum + r.di_final, 0) / ranking.length;
-            const diVarianceFinal = ranking.reduce((sum, r) => sum + Math.pow(r.di_final - diMeanFinal, 2), 0) / ranking.length;
+            const diMeanFinal = ranking.reduce((sum, r) => sum + r.di_final, 0) / (ranking.length || 1);
+            const diVarianceFinal = ranking.reduce((sum, r) => sum + Math.pow(r.di_final - diMeanFinal, 2), 0) / (ranking.length || 1);
             const diStdDevFinal = Math.sqrt(diVarianceFinal);
 
             // Ordenar según el criterio actual
@@ -624,7 +797,6 @@ Intentos totales: ${item.totalCount}
             }
 
             function getTierByDI(di) {
-                // Basado en desviaciones estándar: S (≥+1.5σ) | A (+1.0σ a +1.5σ) | B (-0.5σ a +1.0σ) | C (-1.0σ a -0.5σ) | D (<-1.0σ)
                 const zScore = (di - diMeanFinal) / diStdDevFinal;
                 
                 if (zScore >= 1.5) return { stars: 5, label: 'S', color: 'rgba(255,215,0,0.25)' };
@@ -656,6 +828,8 @@ Intentos totales: ${item.totalCount}
             
             for (const col of COLUMNS) {
                 for (const range of GEAR_RANGES) {
+                    if (!selectedRanges.has(range.label)) continue;
+
                     const raidKey = `${col.raid}${col.gate}${range.label}`;
                     const arrow = currentSortKey === raidKey
                         ? (currentSortDirection === 'desc' ? ' ↓' : ' ↑')
@@ -683,6 +857,8 @@ Intentos totales: ${item.totalCount}
 
                 for (const col of COLUMNS) {
                     for (const range of GEAR_RANGES) {
+                        if (!selectedRanges.has(range.label)) continue;
+
                         const raidKey = `${col.raid}${col.gate}${range.label}`;
                         const val = spec.raids[raidKey];
                         const diValue = val ? val.di.toFixed(3) : '-';
@@ -742,6 +918,12 @@ Count: ${val.count}`;
                     });
                 }
             }, 0);
+        }
+
+        function updateFilterInfo(visible, filtered) {
+            const info = document.getElementById('filterInfo');
+            const rangesText = Array.from(selectedRanges).join(', ');
+            info.innerHTML = `<strong>Filtros activos:</strong> Mínimo ${minAttempts} intentos | Rangos: ${rangesText} | Mostrando ${visible} de ${visible + filtered} especialidades`;
         }
         
         loadData();
