@@ -301,6 +301,7 @@
             <div class="legend-item"><strong>Ratio UpperWhisker RUW (Z-normalizado):</strong> (UpperWhisker - Mediana) / Mediana</div>
             <div class="legend-item"><strong>DI:</strong> 0.5 × Z(IQR_rel) + 0.3 × Z(SG) + 0.2 × Z(RUW)</div>
             <div class="legend-item"><strong>DI Final:</strong> Promedio ponderado por número de intentos (count) en cada rango de gear score</div>
+            <div class="legend-item"><strong>Tiers:</strong> S (DI ≥ +1.5σ) | A (+1.0σ ≤ DI < +1.5σ) | B (-0.5σ ≤ DI < +1.0σ) | C (-1.0σ ≤ DI < -0.5σ) | D (DI < -1.0σ)</div>
             <div class="legend-item">Mayor DI = Mayor dificultad en la especialización</div>
         </div>
     </div>
@@ -331,7 +332,8 @@
         let zScoreStats = {
             iqr_rel: { mean: 0, stdDev: 1 },
             sg: { mean: 0, stdDev: 1 },
-            ruw: { mean: 0, stdDev: 1 }
+            ruw: { mean: 0, stdDev: 1 },
+            di_final: { mean: 0, stdDev: 1 } // Para calcular tiers basados en desviaciones estándar
         };
         
         function calculateDifficultyComponents(q1, median, q3, max, upperWhisker) {
@@ -392,7 +394,7 @@
             const allSGs = [];
             const allRUWs = [];
 
-            // Recolectar todos los valores
+            // Recolectar todos los valores para calcular stats
             for (const col of COLUMNS) {
                 for (const range of GEAR_RANGES) {
                     const key = getFileKey(col.raid, col.gate, range);
@@ -429,7 +431,7 @@
             return `specIcons/${sanitized}.jpg`;
         }
 
-        function renderTierVisualTable(tiersMap, globalMeanDI) {
+        function renderTierVisualTable(tiersMap, diMeanFinal, diStdDevFinal) {
             let html = `
             <div style="margin-bottom:12px;">
                 <button id="toggleTiers" class="tab-btn active">
@@ -460,15 +462,16 @@
                     html += `<span style="opacity:0.5;font-style:italic;">(Vacío)</span>`;
                 } else {
                     for (const item of specs) {
-                        const delta = ((item.di_final - globalMeanDI) * 100).toFixed(1);
+                        const zScore = calculateZScore(item.di_final, diMeanFinal, diStdDevFinal);
+                        const delta = ((item.di_final - diMeanFinal) * 100).toFixed(1);
                         
                         html += `
                         <figure class="spec-icon"
                             data-spec="${item.specKey}"
                             title="${item.specKey}
-DI Final: ${item.di_final.toFixed(3)}
+DI Final: ${item.di_final.toFixed(3)} (Z: ${zScore.toFixed(2)})
 Intentos totales: ${item.totalCount}
-Δ vs ${globalMeanDI.toFixed(2)}: ${delta}%">
+Δ vs ${diMeanFinal.toFixed(2)}: ${delta}%">
                             <img src="${specToImagePath(item.specKey)}"
                                 alt="${item.specKey}">
                             <figcaption>
@@ -598,6 +601,11 @@ Intentos totales: ${item.totalCount}
                 ranking.push({ specKey, di_final, spec, totalCount });
             }
 
+            // Calcular media y desviación estándar del DI Final para los tiers
+            const diMeanFinal = ranking.reduce((sum, r) => sum + r.di_final, 0) / ranking.length;
+            const diVarianceFinal = ranking.reduce((sum, r) => sum + Math.pow(r.di_final - diMeanFinal, 2), 0) / ranking.length;
+            const diStdDevFinal = Math.sqrt(diVarianceFinal);
+
             // Ordenar según el criterio actual
             if (currentSortKey === 'di_final') {
                 ranking.sort((a, b) => {
@@ -615,18 +623,14 @@ Intentos totales: ${item.totalCount}
                 });
             }
 
-            const globalMeanDI = ranking.reduce((sum, r) => sum + r.di_final, 0) / ranking.length;
-
             function getTierByDI(di) {
-                const threshold1 = globalMeanDI + 0.08;
-                const threshold2 = globalMeanDI + 0.04;
-                const threshold3 = globalMeanDI - 0.03;
-                const threshold4 = globalMeanDI - 0.08;
-
-                if (di >= threshold1) return { stars: 5, label: 'S', color: 'rgba(255,215,0,0.25)' };
-                if (di >= threshold2) return { stars: 4, label: 'A', color: 'rgba(76,175,80,0.25)' };
-                if (di >= threshold3) return { stars: 3, label: 'B', color: 'rgba(33,150,243,0.25)' };
-                if (di >= threshold4) return { stars: 2, label: 'C', color: 'rgba(255,152,0,0.25)' };
+                // Basado en desviaciones estándar: S (≥+1.5σ) | A (+1.0σ a +1.5σ) | B (-0.5σ a +1.0σ) | C (-1.0σ a -0.5σ) | D (<-1.0σ)
+                const zScore = (di - diMeanFinal) / diStdDevFinal;
+                
+                if (zScore >= 1.5) return { stars: 5, label: 'S', color: 'rgba(255,215,0,0.25)' };
+                if (zScore >= 1.0) return { stars: 4, label: 'A', color: 'rgba(76,175,80,0.25)' };
+                if (zScore >= -0.5) return { stars: 3, label: 'B', color: 'rgba(33,150,243,0.25)' };
+                if (zScore >= -1.0) return { stars: 2, label: 'C', color: 'rgba(255,152,0,0.25)' };
                 return { stars: 1, label: 'D', color: 'rgba(244,67,54,0.25)' };
             }
 
@@ -671,6 +675,7 @@ Intentos totales: ${item.totalCount}
             let pos = 1;
             for (const item of ranking) {
                 const { specKey, di_final, tier, spec, totalCount } = item;
+                const zScoreFinal = (di_final - diMeanFinal) / diStdDevFinal;
 
                 diHtml += `<tr style="background-color:${tier.color};">`;
                 diHtml += `<td style="text-align:center;font-weight:bold;">${pos}</td>`;
@@ -697,7 +702,7 @@ Count: ${val.count}`;
                     }
                 }
 
-                diHtml += `<td style="font-weight:bold;">${di_final.toFixed(3)}</td>`;
+                diHtml += `<td style="font-weight:bold;" title="Z-Score: ${zScoreFinal.toFixed(2)}">${di_final.toFixed(3)}</td>`;
                 diHtml += `<td style="text-align:center;">${totalCount}</td>`;
                 diHtml += `<td style="font-weight:bold;">${'⭐'.repeat(tier.stars)}</td>`;
                 diHtml += '</tr>';
@@ -707,7 +712,7 @@ Count: ${val.count}`;
 
             diHtml += '</tbody></table></div>';
 
-            const tierVisualHtml = renderTierVisualTable(tiersMap, globalMeanDI);
+            const tierVisualHtml = renderTierVisualTable(tiersMap, diMeanFinal, diStdDevFinal);
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + diHtml;
             
             animateSpecMovement();
