@@ -366,7 +366,7 @@
         let currentSortKey = 'avg'; // por defecto promedio global
         let currentSortDirection = 'desc';
         let specPositions = {};
-        let averageRankingPositions = {}; // { specKey: posición en ranking average }
+        let prevRankingPositions = {};
         let isFirstRender = true;
         let currentVersion = 'original';
       
@@ -374,9 +374,7 @@
             try {
                 currentVersion = version;
                 allData = {};
-                isFirstRender = true;
-                specPositions = {};
-                averageRankingPositions = {};
+                // no limpiamos prevRankingPositions ni specPositions para permitir animación
                 currentSortKey = 'avg';
                 currentSortDirection = 'desc';
                 
@@ -459,12 +457,9 @@
                         
                         // Obtener posición en ranking actual (filtrado)
                         const currentPosition = rtaRankingSorted.findIndex(r => r.specKey === item.specKey) + 1;
-                        // Obtener posición en ranking average
-                        const averagePosition = averageRankingPositions[item.specKey] || 0;
-                        // Calcular diferencia (positivo = mejor en el actual)
-                        const positionChange = averagePosition - currentPosition;
-                                                
-                        let positionChangeHtml = '';
+                        const prevPos = oldPositions[item.specKey] || 0;
+                        // Calcular diferencia (positivo = mejor ahora que antes)
+                        const positionChange = prevPos - currentPosition;
                         if (positionChange > 0) {
                             positionChangeHtml = `<div class="position-change up">↑ ${positionChange}</div>`;
                         } else if (positionChange < 0) {
@@ -625,15 +620,8 @@
                 return { specKey, avg, avgConsistency };
             });
 
-            // RANKING POR PROMEDIO (REFERENCIA - NUNCA CAMBIA)
-            const rtaRankingByAvg = [...rtaRanking].sort((a, b) => b.avg - a.avg);
-
-            // Guardar posiciones del ranking average SOLO en la primera renderización
-            if (isFirstRender) {
-                rtaRankingByAvg.forEach((item, index) => {
-                    averageRankingPositions[item.specKey] = index + 1;
-                });
-            }
+            // guardar posiciones previas para calcular cambios en esta renderización
+            const oldPositions = { ...prevRankingPositions };
 
             // RANKING ACTUAL 
             rtaRanking.sort((a, b) => {
@@ -730,6 +718,12 @@
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
             
             animateSpecMovement();
+
+            // guardar ranking actual para la próxima renderización
+            rtaRankingSorted.forEach((item, idx) => {
+                prevRankingPositions[item.specKey] = idx + 1;
+            });
+
             isFirstRender = false;
 
             document.querySelectorAll('.sortable').forEach(th => {

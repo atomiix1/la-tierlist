@@ -366,7 +366,8 @@
         let currentSortKey = 'avg';
         let currentSortDirection = 'desc';
         let specPositions = {};
-        let averageRankingPositions = {}; // { specKey: posición en ranking average }
+        // almacena posiciones del render anterior para calcular diffs
+        let prevRankingPositions = {};
         let isFirstRender = true;
         let currentVersion = 'original';
         
@@ -374,9 +375,7 @@
             try {
                 currentVersion = version;
                 allData = {};
-                isFirstRender = true;
-                specPositions = {};
-                averageRankingPositions = {};
+                // no reiniciamos prevRankingPositions ni specPositions para poder animar
                 currentSortKey = 'avg';
                 currentSortDirection = 'desc';
                 
@@ -459,10 +458,10 @@
                         
                         // Obtener posición en ranking actual (filtrado)
                         const currentPosition = rtaRankingSorted.findIndex(r => r.specKey === item.specKey) + 1;
-                        // Obtener posición en ranking average
-                        const averagePosition = averageRankingPositions[item.specKey] || 0;
-                        // Calcular diferencia (positivo = mejor en el actual)
-                        const positionChange = averagePosition - currentPosition;
+                        // posición previa (del render anterior)
+                        const prevPos = oldPositions[item.specKey] || 0;
+                        // diferencia (positivo = mejor ahora que antes)
+                        const positionChange = prevPos - currentPosition;
                         
                         let positionChangeHtml = '';
                         if (positionChange > 0) {
@@ -626,16 +625,10 @@
             });
 
             // RANKING POR PROMEDIO (REFERENCIA - NUNCA CAMBIA)
-            const rtaRankingByAvg = [...rtaRanking].sort((a, b) => b.avg - a.avg);
+            // guardamos copia de posiciones previas para calcular cambios
+            const oldPositions = { ...prevRankingPositions };
 
-            // Guardar posiciones del ranking average SOLO en la primera renderización
-            if (isFirstRender) {
-                rtaRankingByAvg.forEach((item, index) => {
-                    averageRankingPositions[item.specKey] = index + 1;
-                });
-            }
-
-            // RANKING ACTUAL (PUEDE VARIAR SEG��N EL FILTRO)
+            // RANKING ACTUAL (el orden puede variar según filtro o versión)
             rtaRanking.sort((a, b) => {
                 let valA, valB;
 
@@ -730,6 +723,12 @@
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
             
             animateSpecMovement();
+
+            // almacenar ranking actual para futuros cambios (sort/version)
+            rtaRankingSorted.forEach((item, idx) => {
+                prevRankingPositions[item.specKey] = idx + 1;
+            });
+
             isFirstRender = false;
             
             document.querySelectorAll('.sortable').forEach(th => {
