@@ -290,12 +290,57 @@
         #tierVisualContainer tr {
             transition: background-color 0.3s ease;
         }
+
+        .version-selector {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #2d2d2d;
+            border-radius: 8px;
+            width: fit-content;
+        }
+
+        .version-selector label {
+            font-weight: bold;
+            color: #e0e0e0;
+        }
+
+        .version-selector select {
+            padding: 8px 12px;
+            background-color: #353535;
+            color: #e0e0e0;
+            border: 2px solid #64b5f6;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        .version-selector select:hover {
+            border-color: #42a5f5;
+        }
+
+        .version-selector select:focus {
+            outline: none;
+            border-color: #1e88e5;
+            box-shadow: 0 0 8px rgba(30, 136, 229, 0.5);
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <a href="tierlist-mains.html" class="back-link">← Mains</a>
         <h1>Tierlist DPS - Alts</h1>
+        
+        <div class="version-selector">
+            <label for="versionSelect">Versión:</label>
+            <select id="versionSelect">
+                <option value="original">Enero 2026</option>
+                <option value="mar">Marzo 2026</option>
+            </select>
+        </div>
         
         <div id="content" class="loading">Cargando datos...</div>
         
@@ -323,12 +368,24 @@
         let specPositions = {};
         let averageRankingPositions = {}; // { specKey: posición en ranking average }
         let isFirstRender = true;
+        let currentVersion = 'original';
       
-        async function loadData() {
+        async function loadData(version = 'original') {
             try {
+                currentVersion = version;
+                allData = {};
+                isFirstRender = true;
+                specPositions = {};
+                averageRankingPositions = {};
+                currentSortKey = 'avg';
+                currentSortDirection = 'desc';
+                
+                const prefix = version === 'mar' ? 'mar_' : '';
+                
                 for (const col of COLUMNS) {
                     const key = `${col.raid}${col.gate}Alt`;
-                    const response = await fetch(`tierlist/${col.raid.toLowerCase()}${col.gate}Alt.json`);
+                    const fileName = `${prefix}${col.raid.toLowerCase()}${col.gate}Alt.json`;
+                    const response = await fetch(`tierlist/${fileName}`);
                     if (response.ok) {
                         allData[key] = await response.json();
                     }
@@ -702,7 +759,11 @@
             }, 0);
         }
         
-        loadData();
+        loadData('original');
+        
+        document.getElementById('versionSelect').addEventListener('change', (e) => {
+            loadData(e.target.value);
+        });
     </script>
 </body>
-</html
+</html>
