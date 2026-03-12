@@ -438,7 +438,7 @@
             return dataBySpec[item.specKey].rta[currentSortKey] || 0;
         }
 
-        function renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRankingSorted) {
+        function renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRankingSorted, oldPositions) {
             let html = `
             <div style="margin-bottom:12px;">
                 <button id="toggleTiers" class="tab-btn active">
@@ -740,7 +740,7 @@
             rtaHtml += '</tbody></table></div>';
 
             // Pasar rtaRanking (ranking actual filtrado) a renderTierVisualTable
-            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRanking);
+            const tierVisualHtml = renderTierVisualTable(tiersMap, dataBySpec, globalMean, rtaRanking, oldPositions);
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
             
             animateSpecMovement();
