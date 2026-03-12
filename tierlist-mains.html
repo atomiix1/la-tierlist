@@ -327,6 +327,21 @@
             border-color: #1e88e5;
             box-shadow: 0 0 8px rgba(30, 136, 229, 0.5);
         }
+
+        .version-selector button {
+            padding: 8px 12px;
+            background-color: #64b5f6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s ease;
+        }
+
+        .version-selector button:hover {
+            background-color: #42a5f5;
+        }
     </style>
 </head>
 <body>
@@ -340,6 +355,8 @@
                 <option value="original">Enero 2026</option>
                 <option value="mar">Marzo 2026</option>
             </select>
+            <button id="setBaselineBtn">Establecer base</button>
+            <button id="resetBaselineBtn">Restablecer base</button>
         </div>
         
         <div id="content" class="loading">Cargando datos...</div>
@@ -366,8 +383,9 @@
         let currentSortKey = 'avg';
         let currentSortDirection = 'desc';
         let specPositions = {};
-        // almacena posiciones del render anterior para calcular diffs
-        let prevRankingPositions = {};
+        // almacena el listado de referencia para comparación (baseline)
+        let baselinePositions = {};
+        let initialOriginalPositions = {}; // guarda la base por defecto
         let isFirstRender = true;
         let currentVersion = 'original';
         
@@ -375,7 +393,7 @@
             try {
                 currentVersion = version;
                 allData = {};
-                // no reiniciamos prevRankingPositions ni specPositions para poder animar
+                // la línea anterior no resetea baselinePositions para mantener comparación
                 currentSortKey = 'avg';
                 currentSortDirection = 'desc';
                 
@@ -602,6 +620,16 @@
             ranking.sort((a, b) => b.total - a.total);
             const sortedSpecs = ranking.map(r => r.specKey);
 
+            // si no hay baseline definido y estamos en la primera carga original, lo guardamos
+            if (Object.keys(baselinePositions).length === 0 && currentVersion === 'original' && isFirstRender) {
+                sortedSpecs.forEach((spec, idx) => {
+                    baselinePositions[spec] = idx + 1;
+                });
+                // también guardamos copia para permitir resetear
+                initialOriginalPositions = { ...baselinePositions };
+                isFirstRender = false; // ya no es primera renderización útil
+            }
+
             const rtaRanking = sortedSpecs.map(specKey => {
                 const rtaEntries = dataBySpec[specKey].rta;
                 const values = Object.values(rtaEntries || {});
@@ -626,7 +654,8 @@
 
             // RANKING POR PROMEDIO (REFERENCIA - NUNCA CAMBIA)
             // guardamos copia de posiciones previas para calcular cambios
-            const oldPositions = { ...prevRankingPositions };
+            // referencia usada para calcular cambios: baselinePositions, que se define con un botón o por defecto
+            const oldPositions = { ...baselinePositions };
 
             // RANKING ACTUAL (el orden puede variar según filtro o versión)
             rtaRanking.sort((a, b) => {
@@ -723,12 +752,6 @@
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
             
             animateSpecMovement();
-
-            // almacenar ranking actual para futuros cambios (sort/version)
-            rtaRankingSorted.forEach((item, idx) => {
-                prevRankingPositions[item.specKey] = idx + 1;
-            });
-
             isFirstRender = false;
             
             document.querySelectorAll('.sortable').forEach(th => {
@@ -761,6 +784,32 @@
         
         document.getElementById('versionSelect').addEventListener('change', (e) => {
             loadData(e.target.value);
+        });
+
+        // Botones para establecer / restablecer baseline
+        document.getElementById('setBaselineBtn').addEventListener('click', () => {
+            // usamos último ranking calculado almacenado en rtaRankingSorted global?
+            // no está global, así que volvemos a calcular rápido ejecutando renderTable sin cambiar nada
+            // pero renderTable ya actualiza baselinePositions si está vacío, así que hacemos copia
+            const specs = Object.keys(baselinePositions).length ? Object.keys(baselinePositions) : [];
+            // simple: llamamos renderTable y luego copiamos
+            renderTable();
+            try {
+                const rows = document.querySelectorAll('#content table tbody tr');
+                baselinePositions = {};
+                rows.forEach((tr, idx) => {
+                    const spec = tr.querySelector('.spec-name')?.textContent.trim();
+                    if (spec) baselinePositions[spec] = idx + 1;
+                });
+                alert('Base establecida');
+            } catch (err) {
+                console.error('No se pudo establecer la base', err);
+            }
+        });
+
+        document.getElementById('resetBaselineBtn').addEventListener('click', () => {
+            baselinePositions = { ...initialOriginalPositions };
+            alert('Base restablecida a original');
         });
     </script>
 </body>

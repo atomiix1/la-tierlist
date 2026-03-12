@@ -327,6 +327,21 @@
             border-color: #1e88e5;
             box-shadow: 0 0 8px rgba(30, 136, 229, 0.5);
         }
+
+        .version-selector button {
+            padding: 8px 12px;
+            background-color: #64b5f6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s ease;
+        }
+
+        .version-selector button:hover {
+            background-color: #42a5f5;
+        }
     </style>
 </head>
 <body>
@@ -340,6 +355,8 @@
                 <option value="original">Enero 2026</option>
                 <option value="mar">Marzo 2026</option>
             </select>
+            <button id="setBaselineBtn">Establecer base</button>
+            <button id="resetBaselineBtn">Restablecer base</button>
         </div>
         
         <div id="content" class="loading">Cargando datos...</div>
@@ -366,7 +383,8 @@
         let currentSortKey = 'avg'; // por defecto promedio global
         let currentSortDirection = 'desc';
         let specPositions = {};
-        let prevRankingPositions = {};
+        let baselinePositions = {};
+        let initialOriginalPositions = {};
         let isFirstRender = true;
         let currentVersion = 'original';
       
@@ -374,7 +392,7 @@
             try {
                 currentVersion = version;
                 allData = {};
-                // no limpiamos prevRankingPositions ni specPositions para permitir animación
+                // no reiniciamos baselinePositions para que la comparación se mantenga
                 currentSortKey = 'avg';
                 currentSortDirection = 'desc';
                 
@@ -620,9 +638,17 @@
                 return { specKey, avg, avgConsistency };
             });
 
-            // guardar posiciones previas para calcular cambios en esta renderización
-            const oldPositions = { ...prevRankingPositions };
+            // Si no existe baseline y estamos en la carga original inicial, lo guardamos
+            if (Object.keys(baselinePositions).length === 0 && currentVersion === 'original' && isFirstRender) {
+                sortedSpecs.forEach((spec, idx) => {
+                    baselinePositions[spec] = idx + 1;
+                });
+                initialOriginalPositions = { ...baselinePositions };
+                isFirstRender = false;
+            }
 
+            // referencia para comparación
+            const oldPositions = { ...baselinePositions };
             // RANKING ACTUAL 
             rtaRanking.sort((a, b) => {
                 let valA, valB;
@@ -719,11 +745,6 @@
             
             animateSpecMovement();
 
-            // guardar ranking actual para la próxima renderización
-            rtaRankingSorted.forEach((item, idx) => {
-                prevRankingPositions[item.specKey] = idx + 1;
-            });
-
             isFirstRender = false;
 
             document.querySelectorAll('.sortable').forEach(th => {
@@ -757,6 +778,27 @@
         
         document.getElementById('versionSelect').addEventListener('change', (e) => {
             loadData(e.target.value);
+        });
+
+        // botones para configuración de base
+        document.getElementById('setBaselineBtn').addEventListener('click', () => {
+            renderTable();
+            try {
+                const rows = document.querySelectorAll('#content table tbody tr');
+                baselinePositions = {};
+                rows.forEach((tr, idx) => {
+                    const spec = tr.querySelector('.spec-name')?.textContent.trim();
+                    if (spec) baselinePositions[spec] = idx + 1;
+                });
+                alert('Base establecida');
+            } catch (err) {
+                console.error('Error estableciendo base', err);
+            }
+        });
+
+        document.getElementById('resetBaselineBtn').addEventListener('click', () => {
+            baselinePositions = { ...initialOriginalPositions };
+            alert('Base restablecida a original');
         });
     </script>
 </body>
