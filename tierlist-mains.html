@@ -478,6 +478,8 @@
                         const currentPosition = rtaRankingSorted.findIndex(r => r.specKey === item.specKey) + 1;
                         // posición previa (del render anterior)
                         const prevPos = oldPositions[item.specKey] || 0;
+                        // también la usamos para mostrar en tooltip como "average"
+                        const averagePosition = prevPos;
                         // diferencia (positivo = mejor ahora que antes)
                         const positionChange = prevPos - currentPosition;
                         

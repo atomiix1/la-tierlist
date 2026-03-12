@@ -476,6 +476,7 @@
                         // Obtener posición en ranking actual (filtrado)
                         const currentPosition = rtaRankingSorted.findIndex(r => r.specKey === item.specKey) + 1;
                         const prevPos = oldPositions[item.specKey] || 0;
+                        const averagePosition = prevPos;
                         // Calcular diferencia (positivo = mejor ahora que antes)
                         const positionChange = prevPos - currentPosition;
                         if (positionChange > 0) {
