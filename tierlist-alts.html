@@ -387,6 +387,7 @@
         let initialOriginalPositions = {};
         let isFirstRender = true;
         let currentVersion = 'original';
+        let lastRankedSpecs = [];
       
         async function loadData(version = 'original') {
             try {
@@ -745,6 +746,7 @@
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
             
             animateSpecMovement();
+            lastRankedSpecs = rtaRanking.map(r => r.specKey);
 
             isFirstRender = false;
 
@@ -783,18 +785,12 @@
 
         // botones para configuración de base
         document.getElementById('setBaselineBtn').addEventListener('click', () => {
-            renderTable();
-            try {
-                const rows = document.querySelectorAll('#content table tbody tr');
-                baselinePositions = {};
-                rows.forEach((tr, idx) => {
-                    const spec = tr.querySelector('.spec-name')?.textContent.trim();
-                    if (spec) baselinePositions[spec] = idx + 1;
-                });
-                alert('Base establecida');
-            } catch (err) {
-                console.error('Error estableciendo base', err);
-            }
+            if (lastRankedSpecs.length === 0) renderTable();
+            baselinePositions = {};
+            lastRankedSpecs.forEach((spec, idx) => {
+                baselinePositions[spec] = idx + 1;
+            });
+            alert('Base establecida');
         });
 
         document.getElementById('resetBaselineBtn').addEventListener('click', () => {

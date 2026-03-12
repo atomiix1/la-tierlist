@@ -388,6 +388,7 @@
         let initialOriginalPositions = {}; // guarda la base por defecto
         let isFirstRender = true;
         let currentVersion = 'original';
+        let lastRankedSpecs = []; // keeps order of last rtaRanking
         
         async function loadData(version = 'original') {
             try {
@@ -754,6 +755,8 @@
             document.getElementById('content').innerHTML = tierVisualHtml + '<br>' + rtaHtml;
             
             animateSpecMovement();
+            // guardar lista de specs en orden actual
+            lastRankedSpecs = rtaRanking.map(r => r.specKey);
             isFirstRender = false;
             
             document.querySelectorAll('.sortable').forEach(th => {
@@ -790,23 +793,15 @@
 
         // Botones para establecer / restablecer baseline
         document.getElementById('setBaselineBtn').addEventListener('click', () => {
-            // usamos último ranking calculado almacenado en rtaRankingSorted global?
-            // no está global, así que volvemos a calcular rápido ejecutando renderTable sin cambiar nada
-            // pero renderTable ya actualiza baselinePositions si está vacío, así que hacemos copia
-            const specs = Object.keys(baselinePositions).length ? Object.keys(baselinePositions) : [];
-            // simple: llamamos renderTable y luego copiamos
-            renderTable();
-            try {
-                const rows = document.querySelectorAll('#content table tbody tr');
-                baselinePositions = {};
-                rows.forEach((tr, idx) => {
-                    const spec = tr.querySelector('.spec-name')?.textContent.trim();
-                    if (spec) baselinePositions[spec] = idx + 1;
-                });
-                alert('Base establecida');
-            } catch (err) {
-                console.error('No se pudo establecer la base', err);
+            // establecer baseline según el último ranking calculado
+            if (lastRankedSpecs.length === 0) {
+                renderTable(); // asegura que se genere
             }
+            baselinePositions = {};
+            lastRankedSpecs.forEach((spec, idx) => {
+                baselinePositions[spec] = idx + 1;
+            });
+            alert('Base establecida');
         });
 
         document.getElementById('resetBaselineBtn').addEventListener('click', () => {
